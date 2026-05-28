@@ -1,0 +1,848 @@
+\documentclass[preprint,12pt]{elsarticle}
+\usepackage{adjustbox}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{float}
+\usepackage{placeins}
+\usepackage{xcolor}
+\usepackage[normalem]{ulem}
+\newcommand{\revadd}[1]{\textcolor{blue}{#1}}
+\newcommand{\revdel}[1]{\textcolor{red}{\sout{#1}}}
+\renewcommand{\topfraction}{0.95}
+\renewcommand{\textfraction}{0.05}
+\renewcommand{\floatpagefraction}{0.80}
+
+\journal{Knowledge-Based Systems}
+
+\begin{document}
+
+\begin{frontmatter}
+
+\title{QES6D: Knowledge-driven Quality Enhancement for Semi-supervised 6D Head Pose Estimation in Classroom Scenes}
+
+\author[inst1,inst2]{Jun Yu}
+\ead{junyu@iflytek.com}
+
+\author[inst2]{Jiang Wang}
+\ead{jiangwang9@iflytek.com}
+
+\author[inst3]{Xuwei Fan}
+\ead{fanxuwei@shanghaitech.edu.cn}
+
+\author[inst1,inst2]{Chang Tan\corref{cor1}}
+\ead{changtan2@iflytek.com}
+
+\author[inst1,inst2]{Jinze Wu}
+\ead{hxwjz@mail.ustc.edu.cn}
+
+\author[inst2]{Zhiyuan Cheng}
+\ead{zycheng14@iflytek.com}
+
+\cortext[cor1]{Corresponding author.}
+
+\affiliation[inst1]{organization={State Key Laboratory of Cognitive Intelligence, University of Science and Technology of China},
+ city={Hefei},
+ country={China}}
+\affiliation[inst2]{organization={iFLYTEK Co., Ltd.},
+ city={Hefei},
+ country={China}}
+\affiliation[inst3]{organization={School of Information Science and Technology, ShanghaiTech University},
+ city={Shanghai},
+ country={China}}
+
+\begin{abstract}
+
+Robust head-pose estimation in classroom scenarios is a fundamental problem for smart classroom analytics, student attention assessment, and instructional process modeling. Unlike controlled close-range settings, real classrooms contain distant small faces, blur, low illumination, partial occlusion, unstable detection, and dense crowds, which severely weaken the generalization of conventional supervised head-pose estimators.
+
+To address this problem, we propose QES6D, a classroom-knowledge-guided semi-supervised framework for 6D head-pose estimation. In this work, classroom knowledge denotes interpretable reliability evidence that can be obtained from real classroom videos without additional pose annotation, including detector confidence, face scale, blur level, prediction stability under pose-preserving appearance changes, cross-model agreement, and the easy-to-hard structure of classroom samples. QES6D converts these cues into a two-level reliability mechanism: hard admission removes clearly unreliable pseudo-labels, while a fused reliability score controls the contribution of the retained pseudo-labels during optimization. The model is trained with ground-truth labels, reliability-weighted pseudo-label supervision, and an EMA teacher--student consistency objective under pose-preserving classroom degradations. This design exploits unlabeled classroom data without assuming that all pseudo-labels are equally trustworthy.
+
+We evaluate QES6D on BIWI, AFLW2000, and unlabeled classroom images using standard angular-error metrics, augmentation-consistency diagnostics, pseudo-label admission analysis, component ablation, and reference-free classroom temporal-stability diagnostics. On AFLW2000 and BIWI, QES6D obtains competitive or improved average angular errors under the unified evaluation protocol. For classroom images without dense pose annotations, we deliberately avoid claiming ground-truth-based classroom accuracy; instead, we report qualitative visualization and reference-free diagnostics that characterize temporal stability, localization sensitivity, and remaining failure cases.
+
+\end{abstract}
+
+\begin{highlights}
+
+\item QES6D formulates classroom semi-supervised 6D head-pose estimation as a knowledge-guided pseudo-label reliability modeling problem.
+
+\item A two-level reliability mechanism separates hard pseudo-label admission from soft reliability-weighted optimization, reducing the influence of noisy classroom pseudo-supervision.
+
+\item A pose-preserving EMA consistency objective improves robustness to classroom-style degradations while avoiding geometrically invalid in-plane rotation consistency.
+
+\end{highlights}
+
+\begin{keyword}
+
+Head pose estimation \sep Semi-supervised learning \sep Classroom scene \sep 6D rotation representation \sep Pseudo-label quality control \sep Teacher--student learning \sep Curriculum learning
+
+\end{keyword}
+
+\end{frontmatter}
+
+
+\section{Introduction}
+Head pose estimation (HPE) provides a compact geometric cue for attention, behavior, and interaction analysis in visual intelligence systems. In recent educational analytics, face detection and head-pose cues have been used to evaluate online learning states \cite{li2024online}, model the relationship between head pose and learning engagement \cite{zheng2025lightnet}, and predict learners' engagement and help-seeking behaviors from facial and head-pose features \cite{wang2025engagement}. A recent systematic review further shows that computer-vision-supported classroom behavior recognition mainly focuses on physical action, learning engagement, attention, and emotion \cite{liu2025classroomreview}. These applications highlight the practical importance of robust classroom HPE. However, unlike close-range face analysis, real classroom videos typically involve distant small faces, dense seating, low illumination, motion blur, partial occlusion, and unstable face detection. As a result, classroom HPE must frequently work with noisy, low-quality face crops, making robust pose regression a critical prerequisite for downstream educational behavior analysis.
+
+Recent HPE research has shifted from narrow-range angle prediction to more robust full-range orientation modeling. A 2024 survey indicates that HPE remains an active research topic, especially when full-range angles and unconstrained environments are considered \cite{algabri2024survey}. To improve rotation modeling, Hempel et al. proposed a full-range HPE method based on rotation-matrix formalism and continuous 6D rotation representation \cite{hempel2024tip}. Cobo et al. further revisited short-and wide-range HPE, showing that the choice of representation, error metric, and reference-frame alignment can strongly affect cross-dataset evaluation \cite{cobo2024pr}. These studies suggest that real-world HPE performance depends not only on network architecture, but also on rotation representation, loss design, evaluation protocol, and domain mismatch. Nevertheless, public HPE benchmarks usually contain clearer, larger, and better-aligned faces than those extracted from real classroom videos, which limits their direct generalization to classroom scenarios.
+
+Semi-supervised learning offers a natural way to reduce annotation cost by exploiting abundant unlabeled images. Recent semi-supervised HPE research has attempted to leverage unlabeled in-the-wild head images for unconstrained head pose estimation \cite{zhou2026semiuhpe}. More broadly, recent methods have emphasized pseudo-label quality estimation: SemiReward predicts reward scores to select high-quality pseudo-labels and mitigate confirmation bias \cite{semireward2024}, while SimRegMatch shows that pseudo-label reliability is especially difficult to evaluate in regression tasks and introduces uncertainty-based filtering and similarity-based calibration \cite{simregmatch2024}. These observations are highly relevant to classroom HPE, because pseudo-label reliability depends not only on prediction confidence, but also on face detection quality, face scale, image blur, augmentation stability, and, when available, cross-model disagreement. Therefore, directly applying fixed-threshold pseudo-labeling to classroom HPE risks amplifying noisy labels and degrading robustness under severe visual degradation. These challenges lead to three technical requirements: pseudo-label reliability modeling for noisy face crops, pose-preserving robustness learning under classroom degradations, and progressive admission of unlabeled samples according to their quality.
+
+In this paper, we propose QES6D as a classroom-knowledge-driven quality enhancement method for semi-supervised 6D HPE. The method starts from a supervised source model and then builds pseudo-labels from unlabeled classroom frames. The knowledge used by QES6D is not external semantic knowledge; it is the visual and geometric information already contained in classroom videos, including detector confidence, face size, blur level, prediction stability, model agreement, and pose-preserving degradation rules. These cues are used in hard admission, reliability weighting, curriculum activation, and teacher--student consistency training. The consistency branch uses downsampling, blur, low illumination, noise, and local occlusion, which match common classroom degradations. It avoids whole-image in-plane rotation, because rotating a cropped classroom image changes the crop geometry and background layout without necessarily describing a valid change in physical head pose.
+
+The main contributions of this work are summarized as follows:
+\begin{enumerate}
+ \item \textbf{A two-level quality-aware pseudo-labeling strategy for continuous classroom head-pose regression.}
+ Compared with conventional pseudo-labeling methods that mainly rely on a single model-confidence threshold~\cite{lee2013pseudo,sohn2020fixmatch,softmatch2023,freematch2023}, QES6D separates pseudo-label reliability modeling into hard admission and soft weighting. Detection confidence, face scale, blur quality, test-time augmentation (TTA) stability, and cross-model agreement are used to reject unreliable classroom face crops, while a fused reliability score controls the contribution of admitted pseudo-labels during optimization. This design provides more reliable pseudo-supervision for continuous $SO(3)$ head-pose regression under classroom-specific noise such as small faces, occlusion, blur, and detection instability.
+
+ \item \textbf{A pose-preserving degradation-consistency objective for classroom visual conditions.}
+ Compared with general teacher--student consistency methods that impose consistency under generic image perturbations~\cite{tarvainen2017mean,xie2020uda,berthelot2020remixmatch,flexmatch2021}, QES6D enforces consistency under classroom-style, pose-preserving degradations, including downsampling, blur, low illumination, noise, and local occlusion. It deliberately avoids whole-image in-plane rotation, which changes crop geometry and background layout without necessarily corresponding to a valid physical 3D head-pose change. This objective improves robustness to realistic classroom degradations while preserving the geometric semantics of head-pose estimation.
+
+ \item \textbf{A quality-driven curriculum strategy for stable semi-supervised learning under classroom domain shift.}
+ Compared with static pseudo-label selection or generic curriculum thresholding strategies~\cite{flexmatch2021,metathreshold2024,semireward2024}, QES6D progressively expands the admissible pseudo-labeled set according to classroom-relevant quality cues, moving from large, clear, and stable faces to smaller, blurrier, and more challenging samples. By coupling curriculum admission with fused-reliability weighting, the proposed strategy balances pseudo-label reliability and classroom-domain coverage, reducing early-stage confirmation bias and stabilizing semi-supervised optimization under severe domain shift.
+\end{enumerate}
+
+\section{Related Work}
+\subsection{Head pose estimation}
+Early HPE methods rely on datasets such as 300W-LP~\cite{zhu2016face}, which uses 3D face modeling to synthesize large-pose training samples, and are evaluated on benchmarks such as AFLW and BIWI. Rotation representation is a central design choice. The continuous 6D rotation representation~\cite{zhou2019continuity} reduces discontinuity artifacts in neural rotation regression, enabling direct full-range HPE~\cite{hempel2022sixdrepnet,hempel2024tip}. Systematic studies further show that evaluation protocol and reference-frame alignment strongly affect cross-dataset comparison~\cite{cobo2024pr}. Recent efforts also explore event-based HPE~\cite{yuan2024eventhpe}, unsupervised landmark-pose discovery~\cite{tourani2025cvpr}, and unified multi-task face models that include HPE as one subtask~\cite{narayan2025iccv}. Despite these advances, existing HPE methods are predominantly supervised or benchmark-oriented. They do not address the core challenge in this work: how to obtain reliable supervision for unlabeled classroom images with severe visual degradation.
+
+\subsection{Semi-supervised learning and pseudo-labels}
+Classical semi-supervised methods use entropy minimization~\cite{grandvalet2005entropy}, pseudo-labeling~\cite{lee2013pseudo}, and temporal consistency~\cite{laine2017temporal,tarvainen2017mean}. Recent approaches combine pseudo-labels with strong augmentation and confidence-based selection~\cite{sohn2020fixmatch,xie2020uda} and introduce adaptive thresholds~\cite{flexmatch2021,freematch2023} or soft weighting~\cite{softmatch2023} to replace rigid confidence cutoffs.
+
+For QES6D, the key challenge is that pseudo-label reliability in continuous pose regression cannot be captured by a classification-style confidence score alone. Several works address related reliability issues. Adaptive thresholding methods estimate sample-aware or distribution-aware confidence thresholds to improve pseudo-label selection~\cite{metathreshold2024,dmlfixmatch2024}. Quality-prediction approaches assign reward scores to pseudo-labels~\cite{semireward2024} or use uncertainty-based filtering and similarity-based calibration~\cite{simregmatch2024}. Noise-correction methods refine pseudo-labels through iterative updates~\cite{jin2025kbs,plr2025}. The trust-awareness perspective directly targets pseudo-label bias and error propagation~\cite{trustmatch2025}. QES6D builds on these insights but differs in two respects: (1) it designs pseudo-label reliability specifically for continuous $SO(3)$ regression rather than classification, and (2) it combines quality-aware pseudo-label weighting with a pose-preserving consistency objective under classroom-specific domain shift.
+
+\subsection{Face detection and low-quality face analysis}
+In classroom HPE, pose estimation operates on face crops from a detector, so detection quality directly affects downstream reliability. Modern real-time detectors provide not only bounding boxes but also confidence scores and scale information~\cite{wang2024yolov9,wang2024yolov10}, which QES6D uses as hard admission cues for pseudo-label filtering.
+
+Classroom videos frequently contain low-quality faces. Blind face restoration research shows that learning degradation-unaware representations can improve generalization to unknown real-world degradations~\cite{xie2024pltrans}, and codebook-based or generative-prior-based methods~\cite{wang2021gfpgan,wang2022codeformer} further demonstrate robust recovery from severely degraded inputs. These findings support a core design choice in QES6D: rather than restoring face quality before pose regression, we enforce the model to learn degradation-invariant representations through classroom-style consistency regularization.
+
+\subsection{Educational visual analytics}
+Head pose and facial cues have been widely used for engagement recognition, affect detection, and attention modeling in educational settings~\cite{whitehill2014faces,bosch2016detecting}. Recent classroom-specific HPE studies address occlusion and multi-scale perception in innovative classroom layouts~\cite{li2025classroompose}, and learning analytics research increasingly uses head-pose features for engagement and help-seeking prediction~\cite{wang2025engagement}. 
+Recent classroom behavior recognition work also emphasizes high-resolution feature fusion for small and densely distributed classroom targets. EduYOLO proposes a classroom behavior recognition framework based on high-resolution feature attention fusion, including a key-region perception backbone, a fine-grained action modeling neck, and a high-resolution prediction head for improving small-object and fine-grained behavior recognition in classroom scenes~\cite{eduyolo2026}. This line of work is complementary to QES6D: behavior-recognition detectors focus on locating and classifying classroom actions, whereas QES6D focuses on continuous head-orientation estimation from face crops. In future classroom analytics systems, high-resolution student-region features or proposals from EduYOLO-style detectors could be reused to reduce the dependence of QES6D on face-only detection under severe occlusion or downward-facing poses.
+
+These works confirm the practical value of head-pose cues for education, but they typically assume reasonably clean input conditions. QES6D complements them by providing a semi-supervised HPE backbone that can operate robustly under the severe visual degradation of real classroom videos, thereby serving as a practical upstream module for downstream educational analysis.
+
+\section{Methodology}
+
+We formulate QES6D as a cue‑driven quality enhancement framework for classroom HPE. The framework explicitly leverages three types of readily available cues from classroom videos: (1) acquisition cues (detector confidence, face scale, blur) that correlate with pseudo‑label errors; (2) geometric cues (pose preservation under photometric degradations, but not under in‑plane rotation) that define valid consistency transformations; (3) curriculum cues (easy‑to‑hard ordering of pseudo‑labeled samples) that guide progressive training. These cues are operationalized as quality‑gated pseudo‑labeling, pose‑preserving degradation consistency, and quality‑driven curriculum admission, respectively.
+
+\subsection{Problem definition}
+
+Let the labeled source dataset be
+\begin{equation}
+\mathcal{D}_l = \{(x_i, R_i)\}_{i=1}^{N_l},
+\label{eq:labeled}
+\end{equation}
+where $x_i$ is an input face image and $R_i \in SO(3)$ is the ground-truth head-pose rotation matrix. Let the unlabeled classroom image set be
+\begin{equation}
+\mathcal{D}_u = \{u_j\}_{j=1}^{N_u},
+\label{eq:unlabeled}
+\end{equation}
+where $u_j$ denotes a raw classroom image or video frame without dense head-pose annotation.
+
+The objective is to learn a head-pose estimator $f_\theta$ that predicts a rotation matrix
+\begin{equation}
+\hat{R}=f_\theta(x), \qquad \hat{R}\in SO(3),
+\end{equation}
+and generalizes to challenging classroom conditions, including small faces, blur, low illumination, partial occlusion, dense crowds, and detection instability. The model is trained using labeled source data and abundant unlabeled classroom imagery.
+
+QES6D follows a two-stage training pipeline. The first stage trains a supervised 6D pose estimator on labeled source data. The second stage uses this source-trained model to construct quality-controlled pseudo-labels from unlabeled classroom frames and trains the final student model with supervised loss, pseudo-label supervision, and EMA teacher--student consistency. The complete workflow is summarized in Fig.~\ref{fig:overall_framework}.
+
+\subsection{Overall framework}
+\label{subsec:overall_framework}
+
+\begin{figure}[!htbp]
+ \centering
+ \includegraphics[width=\textwidth]{pics/fig1_qes6d_overall_framework.png}
+ \caption{Overall framework of QES6D. The pipeline contains four stages. First, a 6D pose regressor is trained on labeled source data and then fixed as the primary teacher for pseudo-label refresh. Second, raw classroom frames are processed by a face detector to obtain classroom face crops while preserving detection confidence, face scale, and crop quality information. Third, the primary teacher and the auxiliary estimator are applied with TTA to construct pseudo-labels; quality cues are used for admission, and the fused reliability score $q_k$ is stored for loss weighting. Fourth, the final student model is trained with supervised loss, pseudo-label loss, and EMA teacher--student consistency under curriculum learning. The primary teacher used in pseudo-label refresh and the EMA teacher used in consistency learning are different model roles. The loss boxes show sample-level weighting for illustration; the implementation uses $q$-weighted mini-batch losses.}
+ \label{fig:overall_framework}
+\end{figure}
+
+Fig.~\ref{fig:overall_framework} summarizes the complete QES6D knowledge-driven learning framework, which consists of four functional stages.
+
+\textbf{Stage 1: Supervised initialization.}
+A 6D head-pose regressor $f_{\theta^{(0)}}$ is first trained on labeled source data. After training, $f_{\theta^{(0)}}$ is fixed and used as the primary teacher for offline pseudo-label refresh. Standard benchmarks such as BIWI and AFLW2000 are used only for evaluation under the unified protocol, not as unlabeled classroom data.
+
+\textbf{Stage 2: Classroom image processing.}
+Given raw classroom images, a YOLO-based face detector is applied to obtain candidate face crops. This step preserves classroom-specific information such as original face scale, detection confidence, crop quality, and crowd layout. The detected crops are then passed to the pseudo-label refresh module. Since dense classroom pose annotations are unavailable, classroom images are used for pseudo-label-based training, visualization, and pseudo-label diagnostics rather than MAE-based classroom evaluation.
+
+\textbf{Stage 3: Quality-gated pseudo-label refresh.}
+For each classroom crop, the fixed primary teacher $f_{\theta^{(0)}}$ predicts head pose under lightweight test-time augmentations (TTA), including brightness scaling and Gaussian blur. The auxiliary pose estimator, 6DRepNet~\cite{hempel2022sixdrepnet}, is evaluated under the same TTA protocol. The final pseudo-label $\hat{R}_k$ is obtained by averaging the TTA-aggregated model predictions on $SO(3)$ and projecting the result back to a valid rotation matrix. The variation among TTA predictions is recorded as a stability cue, and the disagreement between the primary teacher and auxiliary estimator is recorded as a cross-model agreement cue. The refresh module then computes quality attributes for each crop and uses them for quality-based admission. The detailed definitions of these attributes and the fused reliability score are given in Section~\ref{sec:reliability_curriculum}. Each retained crop is stored with its rotation pseudo-label $\hat{R}_k$, fused reliability score $q_k$, and auxiliary quality attributes $\mathbf{a}_k$, forming the pseudo-labeled classroom set used later for semi-supervised training.
+
+\textbf{Stage 4: Semi-supervised robust training with curriculum.}
+After pseudo-label refresh, the final student model $f_\theta$ is initialized from the supervised model $f_{\theta^{(0)}}$ and trained with labeled source samples and pseudo-labeled classroom crops. At each epoch, the curriculum selects which pseudo-labeled samples are active: early training uses only high-quality crops, while later training gradually includes harder crops.
+
+During this stage, QES6D maintains an EMA teacher $f_{\theta_{\mathrm{ema}}}$. This EMA teacher is initialized from the student model at the beginning of semi-supervised training and is updated as an exponential moving average of the student parameters. It is not optimized by back-propagation. For consistency learning, the EMA teacher predicts the pose of a weakly augmented crop, while the student predicts the pose of a strongly degraded version of the same crop. The EMA prediction is treated as a fixed target, so gradients are applied only to the student model.
+
+The training objective contains supervised loss, quality-weighted pseudo-label loss, and quality-weighted consistency loss. The reliability score $q_k$ controls the contribution of each pseudo-labeled sample, and the pseudo-label warm-up coefficient controls the overall strength of the unsupervised losses. The primary teacher $f_{\theta^{(0)}}$ used in Stage 3 is therefore distinct from the EMA teacher $f_{\theta_{\mathrm{ema}}}$ used in Stage 4.
+
+\subsection{Supervised Initialization and Pseudo-label Refresh}
+\label{sec:init_refresh}
+
+QES6D starts from a supervised 6D head-pose regressor trained on labeled source data. Given a face crop $x$, the regressor predicts a 6D vector $z\in\mathbb{R}^{6}$ and maps it to a valid rotation matrix by orthogonalization:
+\begin{equation}
+\hat{R}=f_{\mathrm{ortho}}(z),\qquad \hat{R}\in SO(3).
+\label{eq:ortho}
+\end{equation}
+In our implementation, the regressor uses an EfficientNetV2 backbone, global average pooling, and a lightweight MLP regression head before the 6D output layer, as shown in Fig.~\ref{fig:qes6d_regressor}. This network is used as the base pose estimator. The main contribution of QES6D is the quality-aware semi-supervised training framework built around this regressor, rather than a new rotation representation.
+
+\begin{figure}[!htbp]
+ \centering
+ \includegraphics[width=\textwidth]{pics/qes6d_pose_regressor.png}
+ \caption{Architecture of the QES6D pose regressor. Given an input face crop, the EfficientNetV2 backbone extracts a feature map, global average pooling produces a compact feature vector, and an MLP head predicts a 6D rotation representation. The 6D vector is mapped to a valid rotation matrix $\hat{R}\in SO(3)$ by orthogonalization.}
+ \label{fig:qes6d_regressor}
+\end{figure}
+
+The supervised initialization stage trains this regressor on labeled source data:
+\begin{equation}
+\theta^{(0)}=\arg\min_\theta \mathcal{L}_{\mathrm{sup}}(\mathcal{D}_l),
+\label{eq:sup_init}
+\end{equation}
+where $\mathcal{L}_{\mathrm{sup}}$ is the supervised rotation loss. The trained model $f_{\theta^{(0)}}$ is then fixed and exported as the primary teacher for pseudo-label refresh.
+
+Pseudo-label refresh starts from raw classroom frames. A YOLO-based face detector first detects candidate face boxes in each frame. Each detected box is expanded and cropped into a classroom face crop $\tilde{x}_k$. Starting from raw frames keeps the original face scale, detector confidence, crop quality, and crowd layout, which are later used for quality assessment.
+
+For each crop $\tilde{x}_k$, the fixed primary teacher is applied under lightweight test-time augmentations (TTA). In our implementation, TTA consists of the original crop, two brightness-scaled views, and one Gaussian-blurred view. These views are used to test whether the teacher prediction is stable under small image perturbations. The primary-teacher TTA predictions are averaged and projected back to $SO(3)$. The auxiliary pose estimator, 6DRepNet~\cite{hempel2022sixdrepnet}, is applied to the same crop under the same TTA protocol. When the auxiliary estimator is available, its TTA-aggregated prediction is averaged with the primary-teacher prediction on $SO(3)$ to obtain the final pseudo-label $\hat{R}_k$. The auxiliary estimator is used only during pseudo-label refresh and is not optimized during the later semi-supervised training stage. Since the same family of 6D rotation regression methods is also included as a comparison baseline, the ablation study explicitly reports diagnostic variants without cross-model reliability to separate the contribution of the QES6D training strategy from the benefit of an auxiliary teacher.
+
+After pseudo-label refresh and quality admission, the method constructs the pseudo-labeled classroom set:
+\begin{equation}
+\tilde{\mathcal{D}}_u
+=
+\{(\tilde{x}_k,\hat{R}_k,q_k,\mathbf{a}_k)\}_{k=1}^{N_p}.
+\label{eq:pseudo_dataset}
+\end{equation}
+Here, $\tilde{x}_k$ is the classroom face crop, $\hat{R}_k$ is the rotation pseudo-label, $\mathbf{a}_k$ is the raw quality-attribute vector, and $q_k$ is a scalar reliability weight. The next subsection describes how $\mathbf{a}_k$ and $q_k$ are computed and used.
+
+\subsection{Two-level Reliability Modeling and Curriculum Admission}
+\label{sec:reliability_curriculum}
+
+QES6D uses two kinds of quality information for each pseudo-labeled crop: the raw quality-attribute vector $\mathbf{a}_k$ for hard admission and curriculum scheduling, and the scalar reliability score $q_k$ for loss weighting. Fig.~\ref{fig:consensus_pseudo_label} illustrates this process.
+
+\paragraph{Raw quality attributes.}
+For each candidate crop, the attribute vector $\mathbf{a}_k$ records:
+\[
+\mathbf{a}_k =
+\{d_k, s_k^{\mathrm{face}}, b_k, S_{\mathrm{tta}}, S_{\mathrm{model}}\}.
+\]
+Here, $d_k$ is the confidence score returned by the YOLO-based face detector. The face scale $s_k^{\mathrm{face}}$ is computed from the detected box size; in implementation, we use the shorter side of the box, $s_k^{\mathrm{face}}=\min(w_k,h_k)$, where $w_k$ and $h_k$ are the detected face width and height. The sharpness score $b_k$ is computed as the variance of the Laplacian response of the crop; a lower value indicates stronger blur.
+
+The TTA consistency gap $S_{\mathrm{tta}}$ measures prediction stability. In our implementation, the primary teacher predicts the original crop, two brightness-scaled views, and one Gaussian-blurred view. $S_{\mathrm{tta}}$ is the mean angular difference between the original-view prediction and the augmented-view predictions. A smaller value indicates a more stable teacher prediction.
+
+In the default setting, the auxiliary estimator is enabled, so QES6D also computes the model consistency gap $S_{\mathrm{model}}$. The primary teacher and the auxiliary estimator first produce TTA-aggregated predictions. These predictions are averaged on $SO(3)$ to obtain an agreement rotation $R_k^*$. $S_{\mathrm{model}}$ is the average angular distance from each model prediction to $R_k^*$. A smaller value indicates stronger agreement between the two estimators.
+
+\paragraph{Hard admission.}
+A crop is rejected when its detector confidence is too low, its face scale is too small, its sharpness score is too low, its TTA consistency gap is too large, or its model consistency gap is too large. These checks remove common classroom failure cases such as unstable detection, distant small faces, blurred crops, unstable teacher predictions, and disagreement between pose estimators.
+
+\paragraph{Fused reliability score.}
+For each admitted crop, QES6D computes a scalar reliability score $q_k$ that is later used as the loss weight during semi-supervised training. In the multi-model setting, the score is defined as
+\[
+q_k=\alpha_v q_{\mathrm{valid}}+\alpha_t q_{\mathrm{tta}}+\alpha_m q_{\mathrm{model}},
+\quad \alpha_v+\alpha_t+\alpha_m=1 .
+\]
+The validity term is used only as a numerical safeguard:
+\[
+q_{\mathrm{valid}}=\exp \left(-\beta_{\mathrm{valid}}
+\left\|\hat{R}_k^\top \hat{R}_k-I\right\|_F\right).
+\]
+Because each pseudo-label is projected back to $SO(3)$, this term is usually close to one and is not the main source of reliability discrimination. The main reliability evidence comes from TTA stability and cross-model agreement:
+\[
+q_{\mathrm{tta}}=\exp \left(-\frac{S_{\mathrm{tta}}}{\sigma_{\mathrm{tta}}}\right),
+\qquad
+q_{\mathrm{model}}=\exp \left(-\frac{S_{\mathrm{model}}}{\sigma_{\mathrm{model}}}\right).
+\]
+A smaller TTA gap indicates that the teacher prediction is stable under pose-preserving appearance perturbations, while a smaller model gap indicates stronger agreement between independent pose estimators. The fusion weights and temperature parameters are summarized in Table~\ref{tab:qes6d_implementation_config}. If the auxiliary estimator is disabled, the model-consistency term is omitted and the remaining weights are re-normalized. This design should be interpreted as knowledge-guided reliability estimation rather than as a proof of pseudo-label correctness; without dense classroom pose labels, the reliability score is validated indirectly through admission diagnostics, benchmark preservation, and reference-free classroom stability.
+
+\paragraph{Curriculum admission.}
+The curriculum is applied after hard admission. Hard admission first defines the retained pseudo-label pool by removing clearly unreliable crops. The curriculum then decides which retained samples are active at each epoch. The hard-admission thresholds define the minimum acceptable quality, while the curriculum thresholds are stricter at early epochs and gradually approach the final admission thresholds.
+
+Early in training, the curriculum activates only easier samples: active crops must have larger face size, higher sharpness, lower TTA consistency gap, and lower model consistency gap. As training proceeds, the thresholds are gradually relaxed, allowing smaller, blurrier, and more difficult classroom crops to enter training.
+
+For a curriculum threshold $\tau_r(t)$, we use
+\[
+\tau_r(t)=\tau_r^{\mathrm{start}}+
+\gamma_t(\tau_r^{\mathrm{end}}-\tau_r^{\mathrm{start}}),
+\qquad
+\gamma_t=\min(1,t/T_{\mathrm{ramp}}),
+\]
+where $T_{\mathrm{ramp}}$ is the curriculum ramp length. For face scale and sharpness, the thresholds decrease over training; for TTA and model consistency gaps, the thresholds increase over training. At each epoch, a pseudo-labeled sample is active only if it satisfies the current curriculum thresholds. The start thresholds, end thresholds, and ramp length are summarized in Table~\ref{tab:qes6d_implementation_config}.
+
+\begin{figure}[!htbp]
+ \centering
+ \includegraphics[width=\textwidth]{pics/fig2_consensus_pseudo_label_construction.png}
+ \caption{Quality-gated pseudo-label refresh and reliability estimation. For each detected classroom crop $\tilde{x}_k$, the fixed primary teacher predicts the original crop and several TTA views to estimate within-teacher stability. The TTA consistency gap is computed by the geodesic distance $\Delta(\cdot,\cdot)$ between the original-view prediction and the augmented-view predictions; a smaller gap indicates a more stable pseudo-label. When the auxiliary estimator is enabled, its TTA-aggregated prediction is compared with the primary-teacher prediction to compute the cross-model consistency gap. The raw quality attributes, including detection confidence, face scale, image sharpness, TTA consistency gap, and model consistency gap, are used for hard admission and curriculum activation. The fused reliability score $q_k$ combines numerical rotation validity, TTA consistency confidence, and model agreement confidence, and is stored as the loss weight for the admitted pseudo-label.}
+ \label{fig:consensus_pseudo_label}
+\end{figure}
+
+\subsection{Pose-preserving Degradation Consistency}
+\label{sec:consistency}
+
+This module is applied during semi-supervised training after a pseudo-labeled crop has been activated by the curriculum. For each active crop $\tilde{x}_k$, QES6D creates two views of the same face: a weak view $\tilde{x}_k^{w}$ and a strongly degraded view $\tilde{x}_k^{s}$. The weak view keeps the crop close to its original appearance. The strong view applies classroom-style degradations including downsampling, blur, brightness compression, sensor noise, and local occlusion. These operations simulate distant small faces, motion blur, low illumination, camera noise, and partial occlusion, while preserving the underlying head orientation.
+
+The EMA teacher $f_{\theta_{\mathrm{ema}}}$ predicts a rotation from the weak view, and the student model $f_\theta$ predicts from the strongly degraded view:
+\[
+\hat{R}_k^{w}=f_{\theta_{\mathrm{ema}}}(\tilde{x}_k^{w}),\qquad
+\hat{R}_k^{s}=f_\theta(\tilde{x}_k^{s}).
+\]
+The EMA prediction is treated as a fixed target via stop-gradient, so the sample-level consistency loss is
+\[
+\mathcal{L}_{\mathrm{cons}}
+=
+q_k\,\ell\left(
+\operatorname{sg}(\hat{R}_k^{w}),\,
+\hat{R}_k^{s}
+\right),
+\]
+where $\ell(\cdot,\cdot)$ denotes the rotation loss used in training. In the main implementation, $\ell(\cdot,\cdot)$ is instantiated as a geodesic-plus-axis loss. Gradients are applied only to the student model. The same reliability score $q_k$ used for pseudo-label supervision also weights this consistency term, so less reliable pseudo-labeled crops have smaller influence on both unsupervised losses. In implementation, this loss is computed as a $q$-weighted mini-batch average.
+
+Whole-image in-plane rotation is not used as a consistency transformation. Rotating a classroom crop changes the image boundary, background, shoulders, occluders, and crop geometry. Such a transformation is not equivalent to a valid physical 3D head-pose change, so enforcing consistency under it could introduce an incorrect pose constraint.
+
+The EMA teacher is updated from the student parameters during semi-supervised training:
+\[
+\theta_{\mathrm{ema}} \leftarrow \mu\theta_{\mathrm{ema}} + (1-\mu)\theta,
+\label{eq:ema}
+\]
+where $\mu$ is the EMA decay coefficient. The EMA teacher therefore provides a smoother target than the current student while remaining tied to the student learning process.
+
+\begin{figure}[!htbp]
+ \centering
+ \includegraphics[width=\textwidth]{pics/fig3_classroom_degradation_consistency.png}
+ \caption{Pose-preserving classroom-degradation consistency. This module is applied only to active pseudo-labeled crops selected by the curriculum. For each active crop $\tilde{x}_k$, the EMA teacher receives a weak view and produces a stop-gradient anchor prediction $\hat{R}_k^{w}$, while the trainable student receives a strongly degraded view and predicts $\hat{R}_k^{s}$. The strong branch applies classroom-style pose-preserving degradations, including downsampling, blur, low illumination, noise, and occlusion. The consistency loss is weighted by the same fused reliability score $q_k$ used for pseudo-label supervision. Here, $\ell(\cdot,\cdot)$ denotes the rotation loss used for optimization, while $\Delta(\cdot,\cdot)$ in Fig.~\ref{fig:consensus_pseudo_label} denotes the geodesic distance used to compute reliability gaps. The loss boxes show sample-level weighting for illustration; the implementation uses $q$-weighted mini-batch averages for $\mathcal{L}_{\mathrm{pseudo}}$ and $\mathcal{L}_{\mathrm{cons}}$.}
+ \label{fig:degradation_consistency}
+\end{figure}
+
+\subsection{Training Objective}
+\label{sec:training_objective}
+
+At epoch $t$, the model is trained on labeled source samples and the active pseudo-labeled classroom samples selected by the curriculum:
+\begin{equation}
+\mathcal{D}_{\mathrm{train}}(t)
+=
+\mathcal{D}_l
+\cup
+\tilde{\mathcal{D}}_u^{\,\mathrm{act}}(t).
+\label{eq:trainset}
+\end{equation}
+The supervised loss is computed on labeled source samples:
+\begin{equation}
+\mathcal{L}_{\mathrm{sup}}
+=
+\frac{1}{|\mathcal{B}_l|}
+\sum_{(x,R)\in\mathcal{B}_l}
+\ell(f_\theta(x),R),
+\label{eq:sup_loss}
+\end{equation}
+where $\mathcal{B}_l$ is a labeled mini-batch and $\ell(\cdot,\cdot)$ denotes the rotation loss.
+
+For an active pseudo-labeled mini-batch $\mathcal{B}_u$, the pseudo-label loss is computed as a $q$-weighted batch average:
+\begin{equation}
+\mathcal{L}_{\mathrm{pseudo}}
+=
+\frac{
+\sum_{(\tilde{x}_k,\hat{R}_k,q_k)\in\mathcal{B}_u}
+q_k\,
+\ell\left(f_\theta(\tilde{x}_k^{w}),\hat{R}_k\right)
+}{
+\sum_{(\tilde{x}_k,\hat{R}_k,q_k)\in\mathcal{B}_u} q_k+\epsilon
+}.
+\label{eq:pseudo_loss}
+\end{equation}
+Here, $\tilde{x}_k^{w}$ is the weak view of the pseudo-labeled crop, and $\hat{R}_k$ is the stored pseudo-label from the refresh stage.
+
+The consistency loss is also computed as a $q$-weighted batch average:
+\begin{equation}
+\mathcal{L}_{\mathrm{cons}}
+=
+\frac{
+\sum_{(\tilde{x}_k,q_k)\in\mathcal{B}_u}
+q_k\,
+\ell\left(
+\operatorname{sg}\left(f_{\theta_{\mathrm{ema}}}(\tilde{x}_k^{w})\right),
+f_\theta(\tilde{x}_k^{s})
+\right)
+}{
+\sum_{(\tilde{x}_k,q_k)\in\mathcal{B}_u} q_k+\epsilon
+}.
+\label{eq:cons_loss}
+\end{equation}
+Here, $\tilde{x}_k^{s}$ is the strongly degraded view, $\operatorname{sg}(\cdot)$ denotes stop-gradient, and $\ell(\cdot,\cdot)$ denotes the rotation loss used in training. In the main implementation, it is instantiated as a geodesic-plus-axis loss. The reliability score $q_k$ therefore controls the influence of the same pseudo-labeled sample in both pseudo-label supervision and consistency regularization.
+
+The total objective is
+\begin{equation}
+\mathcal{L}
+=
+\mathcal{L}_{\mathrm{sup}}
++
+\lambda_p(t)
+\left(
+\mathcal{L}_{\mathrm{pseudo}}
++
+\lambda_c\mathcal{L}_{\mathrm{cons}}
+\right),
+\label{eq:total_loss}
+\end{equation}
+where $\lambda_p(t)$ is the pseudo-label warm-up coefficient and $\lambda_c$ balances the consistency term. The curriculum controls which pseudo-labels are active at epoch $t$, while $\lambda_p(t)$ controls the overall strength of the unsupervised losses.
+\subsection{Algorithmic Summary}
+\label{sec:algorithm_summary}
+
+Algorithm~\ref{alg:qes6d} summarizes the complete QES6D workflow.
+
+\begin{algorithm}[!htbp]
+\footnotesize
+\caption{QES6D training and pseudo-label admission workflow}
+\label{alg:qes6d}
+\begin{algorithmic}[1]
+\Require Labeled source set $\mathcal{D}_l$, unlabeled classroom frames $\mathcal{D}_u$, face detector $g$, pose model $f_\theta$, auxiliary pose estimator $f_\phi$, hard-admission thresholds, curriculum schedule, loss weights $\lambda_p(t)$ and $\lambda_c$
+\Ensure Deployment model $f_\theta$
+
+\State \textbf{Phase I: Supervised initialization}
+\State Train the 6D pose regressor $f_\theta$ on $\mathcal{D}_l$ using supervised rotation loss.
+\State Export the trained model as the fixed primary teacher $f_{\theta^{(0)}}$.
+
+\State \textbf{Phase II: Quality-gated pseudo-label refresh}
+\For{each classroom frame $u_j\in\mathcal{D}_u$}
+ \State Detect candidate face boxes using $g$ and crop face regions.
+ \For{each candidate crop $\tilde{x}_k$}
+ \State Apply the primary teacher $f_{\theta^{(0)}}$ to the original crop and TTA views.
+ \State Apply the auxiliary estimator $f_\phi$ under the same TTA protocol.
+ \State Aggregate TTA predictions and model predictions on $SO(3)$ to obtain the pseudo-label $\hat{R}_k$.
+ \State Compute raw quality attributes $\mathbf{a}_k=\{d_k,s_k^{\mathrm{face}},b_k,S_{\mathrm{tta}},S_{\mathrm{model}}\}$.
+ \State Compute the fused reliability score $q_k$ from rotation validity, TTA consistency, and model agreement.
+ \If{hard-admission gates are satisfied}
+ \State Add $(\tilde{x}_k,\hat{R}_k,q_k,\mathbf{a}_k)$ to the retained pseudo-labeled pool $\tilde{\mathcal{D}}_u$.
+ \EndIf
+ \EndFor
+\EndFor
+
+\State \textbf{Phase III: Curriculum-based semi-supervised training}
+\State Initialize the student model $f_\theta$ from $f_{\theta^{(0)}}$.
+\State Initialize the EMA teacher $f_{\theta_{\mathrm{ema}}}$ from the student model.
+\For{epoch $t$}
+ \State Activate pseudo-labeled samples that satisfy the current curriculum thresholds.
+ \State Sample labeled mini-batches from $\mathcal{D}_l$ and active pseudo-labeled mini-batches from $\tilde{\mathcal{D}}_u^{\mathrm{act}}(t)$.
+ \State Create weak views and strongly degraded classroom views for active pseudo-labeled crops.
+ \State Optimize $\mathcal{L}_{\mathrm{sup}}+\lambda_p(t)(\mathcal{L}_{\mathrm{pseudo}}+\lambda_c\mathcal{L}_{\mathrm{cons}})$.
+ \State Update the EMA teacher by $\theta_{\mathrm{ema}}\leftarrow \mu\theta_{\mathrm{ema}}+(1-\mu)\theta$.
+\EndFor
+
+\State \textbf{Phase IV: Selection and export}
+\State Select the final checkpoint under the unified validation rule and export the deployment model.
+\end{algorithmic}
+\end{algorithm}
+
+\FloatBarrier
+
+\section{Experiments}
+\subsection{Experimental Setup}
+\subsubsection{Datasets}
+
+We use the datasets in three separate roles. First, 300W-LP is used as the labeled source training set for supervised initialization. Second, BIWI and AFLW2000 are used as quantitative test benchmarks; they are not used as unlabeled classroom data and do not participate in pseudo-label refresh. Third, the classroom dataset is used as the unlabeled target-domain data for semi-supervised adaptation and classroom-domain analysis. It contains 2,000 classroom frames extracted in temporal order from classroom videos. To avoid temporal leakage, we split the frames chronologically at a 3:1 ratio, with 1,500 frames for pseudo-label-based training and 500 held-out frames for classroom-domain testing and analysis. Each frame contains 39 detected faces on average, giving about 78,000 face crops in total, with about 58,500 crops in the training split and 19,500 crops in the held-out split. These faces vary in scale, blur, illumination, viewing direction, occlusion, and detector confidence. The classroom training split is used for pseudo-label refresh and semi-supervised training. The held-out classroom split is used only for visualization, pseudo-label diagnostics, and reference-free temporal stability analysis. Since dense pose labels are not available for classroom frames, we do not report classroom MAE.
+
+Raw classroom frames are converted into face-level crops by the detector, and each crop is associated with detector confidence, face scale, blur score, TTA stability, cross-model agreement, a pseudo rotation label, and a fused reliability weight. Only the classroom training split is admitted into pseudo-label refresh, quality-aware sample selection, curriculum activation, and pseudo-label-based semi-supervised training. The held-out classroom split is not used for model optimization; it is used for qualitative visualization, pseudo-label diagnostics, and reference-free temporal stability analysis. Since the classroom frames do not provide dense ground-truth pose annotations, we do not report MAE-based classroom accuracy. This data separation ensures that benchmark performance reflects source-to-benchmark generalization on public datasets, whereas classroom-domain analysis reflects the practical behavior of the unlabeled target-domain adaptation process under realistic classroom conditions.
+
+
+\subsubsection{Baselines}
+
+The comparison methods are selected to cover representative lines of head-pose estimation under a reproducible evaluation setting. Hopenet~\cite{ruiz2018hopenet} represents classification-regression based HPE, FSA-Net~\cite{yang2019fsanet} represents feature-aggregation based HPE, 6DRepNet~\cite{hempel2022sixdrepnet} represents 6D rotation-regression based HPE, WHENet~\cite{zhou2020whenet} represents wide-range HPE, and SemiUHPE~\cite{zhou2026semiuhpe} represents semi-supervised HPE.
+
+For fair comparison, all baselines are evaluated under the same face detection results and the same classroom-domain diagnostic protocol (tracking, bounding-box perturbation). Most baselines are supervised-only; we train them on the labeled source set (300W-LP) and evaluate them without using unlabeled classroom images. For SemiUHPE, which supports semi-supervised learning, we re-implement its pipeline using the same unlabeled classroom images as QES6D, keeping its pseudo-labeling hyperparameters as reported in the original paper. 
+
+For the public benchmark comparison, yaw, pitch, roll, and average MAE are reported under the standard AFLW2000 and BIWI protocols used by the compared methods. For the reference-free classroom diagnostics, all compared models are evaluated on the same held-out classroom tracks, using the same face-detection results, tracking protocol, and bounding-box perturbation protocol. Methods for which a consistent classroom-track diagnostic protocol cannot be reproduced are not included in Panel~(b) of Table~2. Therefore, benchmark accuracy is used to assess standard HPE performance, whereas classroom diagnostics are used only to analyze temporal robustness and detection-perturbation sensitivity in the target domain.
+
+\subsubsection{Evaluation metrics}
+The main comparison table uses the following metrics. For a test image $i$, let the ground-truth Euler angles be $\boldsymbol{\theta}_i=(y_i,p_i,r_i)$ and the prediction be $\boldsymbol{\theta}'_i=(y'_i,p'_i,r'_i)$, where $y$, $p$, and $r$ denote yaw, pitch, and roll in degrees. Each axis error is computed with wrapped angular distance,
+\begin{equation}
+ e_i^a = \left| (a'_i-a_i+180) \bmod 360 - 180 \right|,
+ \quad a \in \{y,p,r\}.
+\end{equation}
+Yaw MAE, Pitch MAE, and Roll MAE are the dataset means of $e_i^y$, $e_i^p$, and $e_i^r$, respectively. Avg MAE is the mean of the three axis errors per sample and then averaged over the dataset,
+\begin{equation}
+ \mathrm{Avg\ MAE}=\frac{1}{N}\sum_{i=1}^{N}\frac{e_i^y+e_i^p+e_i^r}{3}.
+\end{equation}
+Acc@10 is the percentage of samples whose per-sample average error is no larger than $10^\circ$, i.e., $\frac{1}{N}\sum_i \mathbf{1}[(e_i^y+e_i^p+e_i^r)/3\leq 10]$. Thus, lower MAE values indicate better angular regression accuracy, whereas higher Acc@10 indicates that more test samples fall inside the 10-degree tolerance.
+
+Aug Mean and Aug P95 are reference-free perturbation-consistency diagnostics. For each evaluated face crop, we first obtain the prediction on the unmodified crop and then re-run the same model on a fixed set of pose-preserving classroom-style perturbations, including brightness reduction, brightness increase, Gaussian blur, and additive image noise in our evaluation script. For each augmented view, we compute the wrapped yaw/pitch/roll differences from the unmodified prediction and average the three axes. The sample-level augmentation score is the mean over the augmented views. Aug Mean is the mean of these sample-level scores over the benchmark, and Aug P95 is their 95th percentile. These two columns do not use pose ground truth; they quantify prediction sensitivity to the shared perturbation protocol. Lower Aug Mean indicates smaller average prediction drift, and lower Aug P95 indicates fewer large perturbation-induced failures. Since the classroom frames do not provide dense pose annotations, classroom results are reported through qualitative visualizations and reference-free temporal stability diagnostics instead of quantitative MAE scores.
+
+
+
+\subsubsection{Implementation details}
+\label{sec:implementation_details}
+
+Table~\ref{tab:qes6d_implementation_config} summarizes the main implementation settings used in the reported experiments. Unless a sensitivity study explicitly changes a parameter, the same settings are used across QES6D runs. The temperatures used to convert TTA and model-consistency gaps into confidence terms are computed as $\sigma_{\mathrm{tta}}=\max(\sigma_{\mathrm{tta}}^{\min},c_{\mathrm{tta}}\tau_t)$ and $\sigma_{\mathrm{model}}=\max(\sigma_{\mathrm{model}}^{\min},c_{\mathrm{model}}\tau_m)$.
+
+\begin{table}[h]
+\centering
+\caption{Compact implementation configuration of QES6D.}
+\label{tab:qes6d_implementation_config}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\textwidth}{p{0.22\textwidth}p{0.30\textwidth}X}
+\toprule
+Group & Setting & Value / description \\
+\midrule
+Model & Backbone and head & \texttt{SixDRepNet\_EffNetV2} with EfficientNetV2-L and 6D rotation output \\
+Training & Optimizer & AdamW, initial learning rate $10^{-4}$, weight decay $10^{-4}$ \\
+Training & EMA teacher & Updated after each optimizer step with decay $\mu=0.999$ \\
+Unsupervised loss & Sampling and loss weights & $\rho_p=0.25$, $\lambda_p^{\max}=0.10$, $\lambda_c=0.20$ \\
+Unsupervised data & Main pseudo-label source & Tile-based classroom pseudo-label source \\
+Fused reliability & Single-teacher weights & $\lambda_{\mathrm{valid}}^{(s)}=0.20$, $\lambda_{\mathrm{tta}}^{(s)}=0.80$ \\
+Fused reliability & Multi-model weights & $\lambda_{\mathrm{valid}}^{(m)}=0.15$, $\lambda_{\mathrm{tta}}^{(m)}=0.35$, $\lambda_{\mathrm{model}}^{(m)}=0.50$ \\
+Fused reliability & Validity and temperature parameters & $\beta_{\mathrm{valid}}=10$, $\sigma_{\mathrm{tta}}^{\min}=6.0$, $c_{\mathrm{tta}}=4$, $\sigma_{\mathrm{model}}^{\min}=4.0$, $c_{\mathrm{model}}=2.5$ \\
+Curriculum & Ramp length & $T_{\mathrm{ramp}}=20$ epochs \\
+Curriculum & Threshold schedule & face size $72\rightarrow40$ px, sharpness $120\rightarrow40$, model gap $3.5^\circ\rightarrow6.0^\circ$ \\
+Evaluation & Benchmarks and metrics & AFLW2000 and BIWI; MAE, Acc@10, Aug Mean, and Aug P95 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+\subsection{Comparison on Standard Benchmarks}
+\label{subsec:benchmark_comparison}
+
+Panel (a) of Table~\ref{tab:benchmark_results} reports the comparison on AFLW2000 and BIWI. Using the tile-source pseudo-label setting as the main configuration, QES6D obtains an average MAE of 3.482$^\circ$ on AFLW2000 and 3.390$^\circ$ on BIWI. On AFLW2000, QES6D achieves the lowest average MAE among the compared methods in the table and improves over 6DRepNet, SemiUHPE, Hopenet, WHENet, and FSA-Net. On BIWI, QES6D also gives the lowest average MAE, together with the lowest pitch and roll errors. The robustness diagnostics further show low perturbation sensitivity, with Aug Mean values of 0.690$^\circ$ on AFLW2000 and 0.348$^\circ$ on BIWI, and an Aug P95 of 0.717$^\circ$ on BIWI. These results indicate that QES6D is not only competitive in standard pose regression, but also less sensitive to the classroom-style perturbations used in the robustness protocol.
+
+The results should be interpreted as a balance among accuracy, robustness, and target-domain adaptation rather than as a claim that one method dominates every metric. SemiUHPE obtains a slightly higher Acc@10 on both benchmarks, and WHENet gives the lowest Aug P95 on AFLW2000. This shows that threshold accuracy and perturbation-tail stability are not always optimized by the same training strategy. QES6D is designed to control noisy pseudo-supervision from classroom images. It first learns a standard 6D pose regressor from labeled source data, and then uses classroom-domain samples only after quality admission and reliability weighting. As a result, stable classroom crops provide stronger gradients, while uncertain crops with small scale, blur, unstable TTA predictions, or large model disagreement have reduced influence. This mechanism explains why QES6D improves average angular error and classroom-domain stability without necessarily being the best in every individual column.
+
+From a domain-adaptation perspective, the benchmark results provide an important sanity check. The unlabeled classroom images used for semi-supervised training are visually different from AFLW2000 and BIWI, and an uncontrolled self-training process could easily degrade public-benchmark performance by reinforcing biased pseudo labels. The fact that QES6D maintains or improves benchmark accuracy suggests that the quality gate and reliability-weighted losses do not simply overfit the classroom videos. Instead, they introduce useful low-quality and small-face variations while suppressing unreliable pseudo-label gradients. Therefore, the benchmark comparison is used together with the classroom diagnostics to support the central claim: the proposed knowledge-driven pseudo-label control improves the operating robustness of HPE under classroom-like degradations while preserving standard HPE accuracy.
+
+
+\begin{table}[h]
+\centering
+\caption{Comparison on standard benchmarks and unlabeled classroom tracks. Panel (a) reports benchmark accuracy on AFLW2000 and BIWI. Lower is better for MAE, Aug Mean, and Aug P95; higher is better for Acc@10. Panel (b) reports reference-free temporal stability diagnostics on 1301 classroom tracks. Mean, P95, and Jitter are measured in degrees and do not use ground-truth pose labels. The classroom diagnostics measure temporal robustness rather than direct pose accuracy. ``--'' denotes unavailable values.}
+\label{tab:benchmark_results}
+\scriptsize
+\renewcommand{\arraystretch}{1.05}
+
+\textbf{(a) Standard benchmark accuracy}\\[1.5mm]
+\setlength{\tabcolsep}{3.2pt}
+\resizebox{0.94\textwidth}{!}{%
+\begin{tabular}{@{}llrrrrrrr@{}}
+\toprule
+Dataset & Model & Yaw MAE & Pitch MAE & Roll MAE & Avg MAE & Acc@10 & Aug Mean & Aug P95 \\
+\midrule
+\multirow{6}{*}{AFLW2000}
+& QES6D (Ours) & \textbf{2.991} & \textbf{4.386} & 3.070 & \textbf{3.482} & 0.941 & \textbf{0.690} & 2.024 \\
+& 6DRepNet~\cite{hempel2022sixdrepnet} & 3.269 & 4.589 & \textbf{2.984} & 3.614 & 0.938 & 0.892 & 2.379 \\
+& SemiUHPE~\cite{zhou2026semiuhpe} & 3.192 & 4.719 & 3.185 & 3.699 & \textbf{0.947} & 0.728 & 2.309 \\
+& Hopenet~\cite{ruiz2018hopenet} & 3.578 & 5.101 & 3.811 & 4.163 & 0.926 & 0.943 & 2.654 \\
+& WHENet~\cite{zhou2020whenet} & 4.424 & 6.023 & 4.500 & 4.982 & 0.907 & 0.892 & \textbf{1.893} \\
+& FSA-Net~\cite{yang2019fsanet} & 8.004 & 7.636 & 6.075 & 7.238 & 0.809 & 1.166 & 3.416 \\
+\midrule
+\multirow{6}{*}{BIWI}
+& QES6D (Ours) & 3.886 & \textbf{3.704} & \textbf{2.581} & \textbf{3.390} & 0.957 & \textbf{0.348} & \textbf{0.717} \\
+& SemiUHPE~\cite{zhou2026semiuhpe} & 3.617 & 4.368 & 2.853 & 3.613 & \textbf{0.992} & 0.452 & 1.046 \\
+& 6DRepNet~\cite{hempel2022sixdrepnet} & \textbf{3.469} & 5.249 & 2.726 & 3.814 & 0.932 & 0.647 & 1.142 \\
+& Hopenet~\cite{ruiz2018hopenet} & 4.781 & 5.183 & 3.332 & 4.432 & 0.951 & 0.988 & 2.376 \\
+& FSA-Net~\cite{yang2019fsanet} & 4.980 & 6.514 & 3.834 & 5.109 & 0.923 & 0.567 & 1.286 \\
+& WHENet~\cite{zhou2020whenet} & 5.483 & 5.563 & 4.331 & 5.126 & 0.958 & 0.711 & 1.518 \\
+\bottomrule
+\end{tabular}%
+}
+
+\vspace{2.5mm}
+\textbf{(b) Reference-free classroom temporal stability}\\[1mm]
+\small
+\setlength{\tabcolsep}{7pt}
+\renewcommand{\arraystretch}{1.08}
+\begin{tabular*}{0.62\textwidth}{@{\extracolsep{\fill}}lrrr@{}}
+\toprule
+Model & Mean ($^\circ$) & P95 ($^\circ$) & Jitter ($^\circ$) \\
+\midrule
+QES6D & \textbf{8.806} & \textbf{16.789} & \textbf{1.961} \\
+QES6D-SupOnly & 10.149 & 19.073 & 2.173 \\
+SemiUHPE & 10.172 & 19.273 & 2.020 \\
+Hopenet & 10.742 & 19.894 & 2.939 \\
+6DRepNet & 12.651 & 25.705 & 2.533 \\
+WHENet & 15.268 & 36.704 & 3.046 \\
+FSA-Net & 16.492 & 31.830 & 5.007 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+
+
+\begin{figure}[!htbp]
+ \centering
+ \includegraphics[width=0.96\textwidth]{pics/contrast.png}
+ \caption{Overall comparison of QES6D and representative head-pose estimation methods on the standard benchmarks. The figure visualizes the relative behavior of different methods across pose-regression accuracy and perturbation-stability diagnostics, complementing the numerical results in Table~\ref{tab:benchmark_results}.}
+ \label{fig:contrast}
+\end{figure}
+
+Figure~\ref{fig:contrast} provides an overall visual summary of the multi-method comparison. It is used together with Table~\ref{tab:benchmark_results} to compare both pose accuracy and prediction stability.
+
+The benchmark results should be read together with the axis-wise, threshold, and augmentation-consistency metrics. QES6D achieves the lowest Avg MAE on both AFLW2000 and BIWI among the methods retained in the unified comparison table, while SemiUHPE obtains the best Acc@10 on both datasets and WHENet obtains the best Aug P95 on AFLW2000. This pattern is informative rather than contradictory. Acc@10 emphasizes whether samples fall below a coarse 10-degree threshold, whereas Avg MAE is more sensitive to continuous regression quality across the whole distribution. Aug P95 measures the tail of perturbation-induced variation, which may favor models with conservative or less responsive predictions. QES6D is not optimized only for one of these criteria. Its objective is to reduce noisy target-domain pseudo-supervision while preserving pose-regression accuracy. The strong branch uses pose-preserving perturbations that are likely to appear in classrooms, such as blur, downsampling, low illumination, noise, and local occlusion. The pseudo-label loss is also weighted by reliability, so the model learns more from stable classroom crops and less from uncertain ones. Therefore, the main conclusion from Table~\ref{tab:benchmark_results} is not that QES6D is uniformly best on every metric, but that it provides a stronger overall trade-off between benchmark accuracy and classroom-oriented robustness.
+
+
+\subsection{Classroom-domain Evaluation without Dense Pose Labels}
+\label{subsec:classroom_domain_evaluation}
+
+To examine the target-domain behavior of QES6D, we evaluate the pipeline on classroom surveillance-style frames. These frames contain multiple students, strong scale variation, small distant faces, partial occlusion, side-view poses, blurred crops, and downward-facing heads. Since dense classroom pose annotations are unavailable, this section is used for qualitative and diagnostic analysis rather than MAE-based evaluation. We therefore avoid claiming classroom pose accuracy from these results. Instead, the purpose is to test whether the model behaves more stably under the two practical disturbances that directly affect classroom HPE: temporal appearance variation and face-box localization noise.
+
+\begin{figure}[!htbp]
+ \centering
+ \includegraphics[width=0.98\textwidth]{pics/overrall.png}
+ \caption{Overall qualitative visualization of QES6D on a representative classroom scene. The pipeline detects multiple students and predicts head-pose axes under dense seating, distant small faces, blurred faces, partial occlusion, side-view poses, and downward-facing heads. Since dense ground-truth pose annotations are unavailable for these classroom frames, this visualization illustrates practical behavior rather than quantitative accuracy.}
+ \label{fig:classroom_overall}
+\end{figure}
+
+Fig.~\ref{fig:classroom_overall} shows that the pipeline can cover many students in a wide-angle classroom view. The tiled detector improves recall for distant students, and geometric merging reduces duplicated boxes around the same student. This matters because unstable localization directly affects subsequent pose estimation.
+
+
+\begin{figure}[!htbp]
+ \centering
+ \includegraphics[width=0.98\textwidth]{pics/faliure.png}
+ \caption{Typical failure cases of the current classroom pipeline. Failure modes include severely downward-facing heads, heavy occlusion, extremely small or blurred faces, ambiguous side-view faces, false positive detections, and missed or unstable face localization. These cases show that the current method is still limited by face-region localization quality and motivate future work on joint face--head detection and temporal track-level refinement.}
+ \label{fig:classroom_failure}
+\end{figure}
+
+Fig.~\ref{fig:classroom_failure} shows that severe downward head pose and heavy occlusion remain difficult for a face-only detector. In these cases, the main failure often occurs before pose regression. A practical extension is to combine face detection with head-region proposals and temporal track-level refinement, so that partially visible heads can be associated across frames instead of being handled only by single-frame face boxes.
+
+
+\subsubsection{Reference-free temporal stability diagnostics}
+
+Because dense ground-truth head-pose labels are unavailable for the classroom frames, we further evaluate target-domain behavior with reference-free temporal stability diagnostics. These metrics are computed on the same 1301 classroom tracks for all compared methods and are summarized in Panel (b) of Table~\ref{tab:benchmark_results}. They measure prediction stability rather than ground-truth pose accuracy.
+
+Let $\mathbf{p}_{i,t}=(y_{i,t},p_{i,t},r_{i,t})$ denote the yaw, pitch, and roll prediction of the $i$-th track at frame $t$. For each valid consecutive frame pair, we compute the wrapped absolute angular difference:
+\begin{equation}
+\mathbf{d}_{i,t}
+=
+\left|
+(\mathbf{p}_{i,t}-\mathbf{p}_{i,t-1}+180) \bmod 360 - 180
+\right|.
+\end{equation}
+The frame-to-frame pose variation is then computed as the three-axis average:
+\begin{equation}
+\delta_{i,t}
+=
+\frac{1}{3}
+\left(
+d^{\mathrm{yaw}}_{i,t}
++
+d^{\mathrm{pitch}}_{i,t}
++
+d^{\mathrm{roll}}_{i,t}
+\right).
+\end{equation}
+Temporal Mean is the mean of $\delta_{i,t}$ over all valid consecutive frame pairs, and Temporal P95 is the 95th percentile of the same set of values. Both metrics are measured in degrees. Lower values indicate smoother frame-to-frame predictions and fewer large temporal jumps.
+
+BBox Jitter measures sensitivity to small detection-box perturbations. For each detected face box, we generate six jittered boxes by shifting the box horizontally or vertically by 4\% of its size and by scaling it to 0.95 and 1.05 of the original size. The model is evaluated on the original crop and the jittered crops. BBox Jitter is the mean yaw/pitch/roll angular difference between the original prediction and the jittered-box predictions, measured in degrees. A lower value indicates that the pose estimator is less sensitive to small localization noise from the face detector.
+
+Panel (b) of Table~\ref{tab:benchmark_results} reports the three reference-free diagnostics. Since dense classroom pose annotations are unavailable, these metrics are not used as accuracy measures. Instead, they evaluate whether the model produces stable predictions under the same classroom tracking and box-perturbation protocol. This distinction is important: a lower temporal variation alone does not prove that a prediction is more accurate, because an over-smoothed model could also appear stable. We therefore interpret the classroom diagnostics jointly with the benchmark MAE results and with the qualitative failure analysis.
+
+QES6D obtains the lowest values on all three diagnostics. Compared with the supervised-only QES6D baseline, QES6D reduces Temporal Mean from 10.149$^\circ$ to 8.806$^\circ$, Temporal P95 from 19.073$^\circ$ to 16.789$^\circ$, and BBox Jitter from 2.173$^\circ$ to 1.961$^\circ$. The corresponding relative reductions are 13.2\%, 12.0\%, and 9.8\%, respectively. These reductions are moderate rather than artificially large, which suggests that the model is not simply collapsing to nearly constant predictions. Instead, the improvement is consistent with the training design. The supervised-only model only sees labeled source images, so its representation is mainly shaped by cleaner source-domain face crops. QES6D adds classroom crops during the semi-supervised stage, but the crops are admitted and weighted according to detector confidence, face scale, blur, TTA stability, and model agreement. From the data side, this exposes the regressor to classroom-specific scale, blur, illumination, and localization changes. From the optimization side, the reliability-weighted pseudo-label loss prevents low-quality pseudo labels from dominating the gradient. The lower temporal variation and BBox Jitter therefore indicate reduced sensitivity to target-domain appearance changes and face-box perturbations, rather than a direct replacement for labeled classroom evaluation.
+
+Compared with external baselines, QES6D also shows lower frame-to-frame variation and lower box-perturbation sensitivity. SemiUHPE is the closest competitor in Panel (b), which is expected because it also exploits semi-supervised learning. However, QES6D still yields lower Temporal Mean, Temporal P95, and Jitter, suggesting that generic semi-supervised HPE is not sufficient for the classroom domain unless pseudo-labels are explicitly filtered and weighted by classroom-specific quality cues. Hopenet, WHENet, FSA-Net, and 6DRepNet show larger temporal fluctuations, especially under the P95 and Jitter metrics, which indicates that source-trained or generic HPE models are more sensitive to the unstable crops produced by classroom face detection. These observations support the practical value of quality-aware pseudo-labeling and classroom-degradation consistency, while also confirming the limitation that true classroom accuracy still requires a manually annotated classroom subset.
+
+
+\subsection{Pseudo-label Construction and Parameter Sensitivity}
+\label{subsec:pseudo_label_analysis}
+
+This subsection analyzes how pseudo-labels are admitted, weighted, and activated during semi-supervised training. The purpose is not to add another benchmark, but to examine the reliability--coverage trade-off that determines the effective classroom-domain supervision. We therefore combine pseudo-label source, sampling ratio, and confidence-threshold sensitivity in one table. This analysis is central to the knowledge-driven claim of QES6D: the method does not assume that unlabeled classroom data are automatically useful; it tries to identify which target-domain samples can provide useful supervision and which samples may amplify confirmation bias.
+
+\subsubsection{Quality-gated admission diagnostics}
+
+Table~\ref{tab:pseudo_label_admission_stats} reports pseudo-label admission statistics under three quality-filtering settings. The extreme setting is a diagnostic boundary case, while the strong and moderate settings provide more practical coverage.
+
+\begin{table}[h]
+\centering
+\caption{Pseudo-label admission statistics under different quality-filtering settings. ``Detected faces'' denotes the retained candidate detections after detector-confidence filtering. The admission ratio is computed with respect to these retained candidate detections. The extreme setting is a diagnostic boundary case rather than a practical training configuration.}
+\label{tab:pseudo_label_admission_stats}
+\scriptsize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrrrrr}
+\toprule
+Setting & Frames & Detected faces & Admitted faces & Rejected faces & Det. conf. threshold & TTA threshold & Admission ratio \\
+\midrule
+Extreme & 1502 & 855 & 1 & 854 & 0.985 & 0.5$^\circ$ & 0.12\% \\
+Strong & 1502 & 20541 & 3801 & 16740 & 0.950 & 2.0$^\circ$ & 18.50\% \\
+Moderate & 1502 & 45857 & 10861 & 34996 & 0.930 & 3.0$^\circ$ & 23.68\% \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+The extreme setting admits only one pseudo-label, showing that overly strict detector-confidence and TTA-consistency thresholds can destroy target-domain coverage. Strong and moderate settings admit 3,801 and 10,861 pseudo-labels, respectively, while still rejecting many candidate crops. This indicates that the quality gate acts as a selective admission mechanism rather than using all detected faces for self-training. The comparison also reveals a key trade-off: stricter filtering increases the expected reliability of each retained crop, but it may remove small, blurred, side-view, or partially occluded samples that are important for classroom-domain adaptation. Conversely, looser filtering improves coverage but increases the risk of noisy pseudo labels.
+
+Fig.~\ref{fig:curriculum_activation} further visualizes how retained pseudo-labels enter training under the curriculum schedule in the moderate-filter stage-2 setting. The number of active pseudo-labels increases from 57 at the first epoch to 5,763 after the curriculum thresholds reach their final values. This plot is not an additional accuracy result; it shows that the retained pool is introduced gradually rather than used all at once. The curriculum therefore controls the timing of pseudo-label exposure: early epochs emphasize low-noise samples to stabilize the regressor, while later epochs add harder classroom crops to improve domain coverage.
+
+\begin{figure}[!htbp]
+ \centering
+ \includegraphics[width=0.72\textwidth]{pics/curriculum_active_pseudolabels_clean.png}
+ \caption{Curriculum activation of pseudo-labeled classroom samples during semi-supervised training. The active pseudo-label pool grows as curriculum thresholds are gradually relaxed. Early epochs use only a small number of high-quality samples, while later epochs include more difficult classroom crops. The plateau indicates that all pseudo-labels retained by the moderate filter have become active.}
+ \label{fig:curriculum_activation}
+\end{figure}
+
+
+\subsubsection{Pseudo-label source and usage sensitivity}
+
+Table~\ref{tab:pseudo_usage_sensitivity} summarizes the pseudo-label source comparison, sampling-ratio sensitivity, and confidence-threshold sensitivity. These experiments have the same role: they test how the amount and quality of admitted pseudo labels affect the final regressor. The tile-based source gives lower Avg MAE than the stricter moderate-filter source on both benchmarks, which suggests that over-filtering removes useful classroom-domain variation. The sampling-ratio and confidence-threshold sweeps further show that pseudo-label usage is not monotonic. Using more pseudo labels or applying stricter confidence thresholds does not necessarily improve benchmark accuracy.
+
+The reason is that pseudo-label quality is tied to the classroom data distribution. High-quality pseudo labels usually come from large, frontal, clear faces, so they provide low-noise targets but cover only a narrow part of classroom scenes. Medium-quality samples include smaller faces, blur, partial occlusion, and side views. They are noisier, but they expose the model to pose and appearance conditions that are under-represented in source training. Low-quality samples, such as unstable detections or samples with large TTA disagreement, are more likely to introduce wrong gradients and are removed by hard admission. Therefore, the proposed mechanism does not simply maximize the number of pseudo labels. It changes the effective supervision by admitting useful target-domain samples, down-weighting uncertain ones, and rejecting samples that are likely to cause confirmation bias.
+
+The sensitivity results support this interpretation. The tile source gives better Avg MAE on both AFLW2000 and BIWI, whereas the moderate-filter source often gives better Aug Mean or Aug P95. This means that a cleaner pseudo-label pool can improve perturbation stability, but it may lose the diversity needed for average regression accuracy. Similarly, increasing the sampling ratio from 0.10 to 0.50 does not monotonically improve the results. A larger pseudo-label ratio exposes the model to more target-domain variation, but it also increases the unsupervised gradient contributed by noisy samples. The confidence-threshold sweep shows the same effect: raising the threshold does not guarantee better performance because detector confidence alone cannot fully measure pose-label reliability. We therefore treat the default settings as practical operating points rather than dataset-specific optima. The main evidence is not any single row of Table~\ref{tab:pseudo_usage_sensitivity}, but the consistent non-monotonic behavior across source construction, sampling ratio, and confidence threshold.
+
+\begin{table}[h]
+\centering
+\caption{Pseudo-label construction and usage sensitivity. Lower is better for Avg MAE, Aug Mean, and Aug P95; higher is better for Acc@10.}
+\label{tab:pseudo_usage_sensitivity}
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llrrrr}
+\toprule
+Analysis & Setting & Avg MAE & Aug Mean & Acc@10 & Aug P95 \\
+\midrule
+\multicolumn{6}{l}{\textbf{Pseudo-label source comparison}} \\
+AFLW2000 & Tile source & \textbf{3.482} & 0.690 & \textbf{0.941} & 2.024 \\
+AFLW2000 & Moderate-filter source & 3.567 & \textbf{0.660} & 0.939 & \textbf{1.876} \\
+BIWI & Tile source & \textbf{3.390} & 0.348 & 0.957 & 0.717 \\
+BIWI & Moderate-filter source & 3.399 & \textbf{0.288} & \textbf{0.958} & \textbf{0.639} \\
+\midrule
+\multicolumn{6}{l}{\textbf{Pseudo-label sampling ratio}} \\
+AFLW2000 & $\rho_p=0.10$ & 3.528 & 0.716 & 0.941 & \textbf{1.964} \\
+AFLW2000 & $\rho_p=0.25$ & \textbf{3.477} & \textbf{0.696} & \textbf{0.943} & 2.308 \\
+AFLW2000 & $\rho_p=0.50$ & 3.506 & 0.721 & 0.942 & 2.061 \\
+BIWI & $\rho_p=0.10$ & \textbf{3.376} & \textbf{0.337} & \textbf{0.961} & 0.715 \\
+BIWI & $\rho_p=0.25$ & 3.421 & 0.343 & 0.957 & 0.738 \\
+BIWI & $\rho_p=0.50$ & 3.458 & 0.352 & 0.956 & \textbf{0.684} \\
+\midrule
+\multicolumn{6}{l}{\textbf{Stage-2 confidence threshold under the moderate filter}} \\
+AFLW2000 & Conf $=0.90$ & \textbf{3.473} & 0.739 & \textbf{0.942} & 2.103 \\
+AFLW2000 & Conf $=0.93$ & 3.571 & \textbf{0.664} & 0.938 & \textbf{2.014} \\
+AFLW2000 & Conf $=0.95$ & 3.561 & 0.737 & 0.940 & 2.151 \\
+BIWI & Conf $=0.90$ & \textbf{3.424} & 0.332 & \textbf{0.958} & 0.702 \\
+BIWI & Conf $=0.93$ & 3.430 & \textbf{0.294} & 0.955 & \textbf{0.652} \\
+BIWI & Conf $=0.95$ & 3.452 & 0.338 & 0.956 & 0.743 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Component Ablation and Consistency-weight Sensitivity}
+\label{subsec:ablation_sensitivity}
+
+This subsection examines the effect of the main training components and the consistency weight $\lambda_c$. The component variants in Table~\ref{tab:component_analysis} are diagnostic runs under the moderate-filter setting, while the QES6D row reports the final tile-source checkpoint used in Table~\ref{tab:benchmark_results}. Thus, Table~\ref{tab:component_analysis} is used to interpret component behavior rather than to select a checkpoint from one individual metric. Pseudo-label source, sampling ratio, and confidence-threshold sensitivity have been summarized in Table~\ref{tab:pseudo_usage_sensitivity}.
+
+\subsubsection{Component analysis}
+
+\begin{table}[t]
+\centering
+\caption{Component-analysis results. Lower is better for Avg, Aug Mean, and P95; higher is better for Acc@10. The diagnostic variants use the same Stage-1 initialization and 15 continuation epochs under the moderate-filter setting, while the QES6D row reports the final tile-source checkpoint used in the main comparison. $N_p^0$ denotes the number of active pseudo labels at the beginning of stage-2 training.}
+\label{tab:component_analysis}
+\small
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.08}
+\begin{tabular}{llcccrrrr}
+\toprule
+Data & Variant & $N_p^0$ & ConsW & Curr. & Avg & Aug Mean & Acc@10 & P95 \\
+\midrule
+\multirow{4}{*}{AFLW}
+& QES6D & 57 & 0.200 & Yes & \textbf{3.482} & 0.690 & \textbf{0.941} & 2.024 \\
+& Naive & 5763 & 0.000 & No & 3.556 & \textbf{0.684} & 0.940 & \textbf{1.900} \\
+& w/o curr. & 5763 & 0.200 & No & 3.622 & 0.729 & 0.936 & 2.136 \\
+& w/o cons. & 57 & 0.000 & Yes & 3.524 & 0.688 & 0.939 & 2.068 \\
+\midrule
+\multirow{4}{*}{BIWI}
+& QES6D & 57 & 0.200 & Yes & 3.390 & 0.348 & 0.957 & \textbf{0.717} \\
+& Naive & 5763 & 0.000 & No & 3.376 & 0.374 & \textbf{0.960} & 0.848 \\
+& w/o curr. & 5763 & 0.200 & No & 3.409 & 0.362 & 0.958 & 0.821 \\
+& w/o cons. & 57 & 0.000 & Yes & \textbf{3.362} & \textbf{0.324} & 0.959 & 0.743 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:component_analysis} shows different behavior on AFLW2000 and BIWI. This difference is important. AFLW2000 contains more in-the-wild images and more large-pose cases, including side-view and less constrained face appearances. In this setting, the full QES6D configuration gives the lowest Avg on AFLW2000, while removing curriculum or consistency weakens the result. This suggests that the two regularization mechanisms are more useful when the test distribution contains stronger pose and appearance variation. The curriculum prevents difficult pseudo labels from dominating early optimization, and consistency regularization constrains the regressor under pose-preserving degradations. Together, they help the model adapt to classroom-style hard samples without treating all pseudo labels as equally reliable.
+
+BIWI shows a smaller component gap. This is reasonable because BIWI is collected in a more controlled environment with high-quality face images and less severe appearance variation than AFLW2000. In such a setting, the benefit of classroom-oriented regularization is less visible in the average error. The $\lambda_c=0$ variant obtains the lowest BIWI Avg and Aug Mean, while the full model obtains the lowest P95. This indicates that consistency mainly affects the tail of perturbation sensitivity rather than always reducing average error. Therefore, the component ablation should be interpreted as evidence that QES6D is most helpful under harder target conditions and larger pose/appearance shifts, not as evidence that each module must improve every metric on every benchmark.
+
+This ablation also clarifies the role of each component. The naive variant uses a much larger active pseudo-label pool from the beginning, which increases target-domain coverage but also exposes the model to noisy pseudo labels before the regressor is stabilized. The w/o curriculum variant keeps consistency regularization but removes the gradual admission schedule; its weaker AFLW2000 result suggests that the ordering of pseudo-label exposure matters when the target pseudo labels contain mixed-quality samples. The w/o consistency variant removes the strong-view regularization; its competitive BIWI Avg indicates that consistency is not always necessary for clean benchmark images, but its weaker P95 shows that it helps control perturbation-tail behavior. Overall, the ablation supports a mechanism-level conclusion: QES6D is not a simple accumulation of modules, but a coordinated design in which filtering controls pseudo-label noise, curriculum controls exposure timing, and consistency controls robustness to classroom-style degradations.
+
+\subsubsection{Sensitivity to the consistency weight}
+
+We further vary the consistency weight $\lambda_c$ and evaluate the resulting checkpoints under the same fair benchmark protocol. Table~\ref{tab:consistency_weight_sensitivity} reports Avg MAE, its 95\% confidence interval, and Aug P95. Fig.~\ref{fig:consistency_weight_sensitivity} shows the same trend visually: solid lines with error bars denote Avg MAE with 95\% confidence intervals, while dashed lines denote Aug P95.
+
+\begin{table}[t]
+\centering
+\caption{Sensitivity to the consistency weight $\lambda_c$. Lower is better for Avg and P95. The full setting corresponds to $\lambda_c=0.200$.}
+\label{tab:consistency_weight_sensitivity}
+\scriptsize
+\setlength{\tabcolsep}{3.5pt}
+\renewcommand{\arraystretch}{1.08}
+\begin{adjustbox}{max width=\textwidth}
+\begin{tabular}{lcccccc}
+\toprule
+\multirow{2}{*}{$\lambda_c$} &
+\multicolumn{3}{c}{AFLW2000} &
+\multicolumn{3}{c}{BIWI} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+& Avg & 95\% CI & P95 & Avg & 95\% CI & P95 \\
+\midrule
+0.000 & 3.524 & [3.312, 3.753] & 2.068 & \textbf{3.362} & [3.325, 3.400] & 0.743 \\
+0.020 & 3.498 & [3.288, 3.726] & 2.106 & 3.418 & [3.380, 3.457] & 0.735 \\
+0.050 & 3.511 & [3.297, 3.745] & 1.883 & 3.433 & [3.395, 3.471] & 0.737 \\
+0.100 & 3.495 & [3.279, 3.733] & \textbf{1.761} & 3.403 & [3.365, 3.441] & 0.658 \\
+0.200 (full) & \textbf{3.482} & [3.266, 3.722] & 2.024 & 3.390 & [3.352, 3.429] & 0.717 \\
+0.300 & 3.559 & [3.344, 3.795] & 1.785 & 3.438 & [3.400, 3.477] & \textbf{0.629} \\
+0.500 & 3.587 & [3.371, 3.822] & 2.052 & 3.439 & [3.400, 3.478] & 0.678 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.96\textwidth]{pics/consistency_weight_single_panel_ci_aug_y3_4.png}
+\caption{Sensitivity to the consistency weight. Solid lines with error bars show Avg MAE with 95\% confidence intervals. Dashed lines show Aug P95 under the fair augmentation protocol.}
+\label{fig:consistency_weight_sensitivity}
+\end{figure}
+
+The sweep confirms that the effect of $\lambda_c$ is not monotonic. A small or moderate consistency weight changes the optimization target from pure pseudo-label fitting to a joint objective that also penalizes prediction changes under degraded views. This can reduce the tail of augmentation sensitivity, as shown by the lower P95 at $\lambda_c=0.100$ on AFLW2000 and $\lambda_c=0.300$ on BIWI. However, a larger consistency weight also increases the influence of strong-view constraints. If the strong-view perturbations are not fully aligned with the benchmark distribution, this constraint can compete with pose-regression accuracy and lead to higher Avg.
+
+The confidence intervals further suggest that small numerical differences in Avg MAE should not be over-interpreted as decisive superiority. For example, several $\lambda_c$ settings have overlapping 95\% confidence intervals, especially on AFLW2000. Thus, the sensitivity study is more useful for understanding the trade-off between average regression accuracy and perturbation-tail robustness than for selecting a universally optimal scalar. The full setting, $\lambda_c=0.200$, is not selected because it is best on every column. It is used as the final operating point because it gives the best AFLW2000 Avg, remains competitive on BIWI, keeps the perturbation sensitivity within a stable range, and follows the same training design as the final QES6D model.
+
+
+\section{Discussion}
+
+\subsection{Effect of quality-aware pseudo-labeling}
+QES6D treats unlabeled classroom data as a quality-sensitive resource rather than assuming that all detected faces are equally useful for self-training. This design is motivated by the structured nature of classroom pseudo-label noise: small faces, motion blur, occlusion, profile views, and detection jitter can repeatedly produce unstable or misleading pose estimates. The proposed two-level mechanism separates pseudo-label admission from loss weighting. Detector confidence, face scale, blur quality, TTA deviation, and optional cross-model disagreement determine whether a candidate crop is admitted, whereas the fused reliability score controls how strongly an admitted pseudo-label contributes to optimization. The admission diagnostics and the stage-2 threshold sweep both show the behavior of this quality-control mechanism: overly strict gates can sharply reduce classroom-domain coverage, while looser gates admit more samples at the risk of increased pseudo-label noise. The pseudo-source comparison further indicates that source construction matters in practice. In the current experiments, the tile-based pseudo-label source is adopted as the main setting because it gives the lower benchmark Avg MAE on both AFLW2000 and BIWI, while the stricter moderate-filter source mainly improves selected augmentation-consistency diagnostics. These findings should be interpreted as evidence of a reliability--coverage trade-off rather than direct proof of pseudo-label correctness, because dense classroom pose annotations are unavailable.
+
+\subsection{Effect of pose-preserving degradation consistency}
+The consistency branch is designed around the geometry of head-pose estimation. Classroom degradations such as downsampling, blur, low illumination, sensor noise, and local occlusion mainly affect image quality, but they should not change the underlying 3D head orientation. The consistency loss therefore provides a regularization signal between weak and strongly degraded views of the same pseudo-labeled crop.
+
+The new consistency-weight sweep shows that this branch is not a monotonic accuracy-improvement module. A small or zero consistency weight can give lower Avg MAE on BIWI, while moderate weights can reduce Aug P95. This behavior is reasonable because Avg MAE measures pose accuracy against ground truth, whereas Aug P95 measures prediction variation under perturbations. The two objectives are related but not identical. In our setting, consistency is used to control perturbation sensitivity during pseudo-label training, not to guarantee the best value in every benchmark column.
+
+
+\subsection{Effect of quality-driven curriculum}
+The curriculum module addresses the fact that pseudo-labels have different difficulty levels even after quality filtering. Early training focuses on large, clear, and stable samples, while later stages gradually include smaller, blurrier, and more difficult classroom samples. The component analysis and threshold sensitivity results suggest that curriculum learning mainly controls where the model operates on the coverage--stability spectrum. Removing curriculum exposes the model to more pseudo-labeled samples earlier. This can improve selected benchmark metrics, but it also tends to weaken perturbation stability or degrade accuracy on another benchmark. Therefore, the curriculum should be understood as a practical schedule for controlling pseudo-label exposure, not as a guarantee of uniform improvement on every metric.
+
+\subsection{Interpretation of classroom knowledge without dense pose labels}
+The term classroom knowledge in QES6D does not refer to external semantic rules or manually written attention labels. It refers to measurable reliability evidence induced by the classroom imaging process. Detector confidence reflects localization reliability, face scale reflects the amount of pose-discriminative visual detail, blur reflects image degradation, TTA stability reflects local prediction smoothness under pose-preserving appearance changes, and cross-model agreement reflects estimator-level consensus. These cues are converted into admission decisions, reliability weights, and curriculum schedules. Therefore, the proposed framework is knowledge-guided in the sense that domain-specific reliability evidence explicitly controls which pseudo-labels are trusted and how strongly they affect learning.
+
+Because dense classroom pose annotations are unavailable, QES6D does not use the classroom split to claim absolute pose accuracy. The classroom analysis should be interpreted as evidence about operating stability, pseudo-label coverage, and failure modes under the target-domain conditions. This is a weaker claim than labeled classroom MAE, but it avoids an unsupported accuracy claim. The benchmark results on AFLW2000 and BIWI are used as a sanity check that classroom adaptation does not collapse standard head-pose accuracy, while the reference-free classroom diagnostics evaluate temporal smoothness and detection-box sensitivity under the same target-domain protocol. Together, these analyses support a cautious conclusion: QES6D improves the reliability and stability of semi-supervised classroom adaptation, but a fully annotated classroom pose benchmark is still required to verify absolute classroom accuracy.
+
+\subsection{Limitations and future work}
+The current framework has four main limitations. First, it still depends on supervised initialization and face-region localization quality. If faces are extremely small, severely downward-facing, or heavily occluded, the face detector may miss them or produce unstable boxes, which limits subsequent pose estimation regardless of the 6D rotation regressor. Second, the classroom images used in this study do not provide dense ground-truth pose annotations. Therefore, the classroom analysis is limited to qualitative visualization, pseudo-label diagnostics, and reference-free temporal stability diagnostics, and it cannot replace quantitative validation on an annotated classroom HPE benchmark. Third, the fused reliability score is designed from interpretable classroom cues, but it is still a proxy for pseudo-label correctness rather than a directly supervised uncertainty estimator. Fourth, the optional auxiliary estimator may improve pseudo-label agreement, so its role must be interpreted together with the ablation results instead of being treated as a free assumption.
+
+Future work should construct an annotated classroom pose subset, introduce stronger joint face--head detection, add temporal track-level refinement, evaluate online pseudo-label refresh with multiple independent teacher models, and learn the reliability fusion function from validation data when annotated classroom samples become available.
+
+\section{Conclusion}
+This paper presents QES6D, a classroom-knowledge-guided semi-supervised head-pose estimation framework based on 6D rotation representation learning. The method integrates three coordinated modules: two-level reliability-aware pseudo-labeling, pose-preserving classroom-degradation consistency, and quality-driven curriculum admission. These modules allow QES6D to exploit unlabeled classroom images while explicitly controlling pseudo-label noise and avoiding augmentation assumptions that conflict with physical head-pose semantics.
+
+Experiments on AFLW2000 and BIWI show competitive benchmark accuracy, while classroom surveillance-style visualization, pseudo-label admission diagnostics, component analysis, and reference-free temporal stability diagnostics characterize the behavior of the proposed pipeline under unlabeled target-domain conditions. Since dense classroom pose annotations are unavailable, the classroom results are not presented as ground-truth pose accuracy. Instead, they provide evidence that quality-guided pseudo-label control can improve temporal stability and reduce sensitivity to detection-box perturbations while preserving standard benchmark performance. The main remaining limitation is the lack of an annotated classroom pose benchmark, especially for severe occlusion, downward-facing heads, and detection failures. Future work will focus on annotated classroom pose evaluation, stronger face--head localization, temporal track-level pseudo-label refinement, and data-driven reliability calibration.
+
+\section*{CRediT authorship contribution statement}
+The detailed CRediT author contribution statement will be completed before submission according to the actual contributions of all authors.
+
+\section*{Declaration of competing interest}
+The authors declare that they have no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper.
+
+\section*{Data availability}
+The public benchmark datasets used in this work follow their original access policies. The classroom images contain educational-scene privacy information and are therefore not publicly released. Processed metadata and evaluation scripts can be made available upon reasonable request, subject to institutional approval.
+
+\bibliographystyle{elsarticle-num}
+\bibliography{qes6d_refs_split_ablation_sensitivity}
+
+\end{document}

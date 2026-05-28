@@ -3,3 +3,7 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 output/
+runs/
+logs/
+*.log
+*.pid
