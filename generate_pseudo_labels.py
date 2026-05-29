@@ -15,15 +15,15 @@ import torch
 from torchvision import transforms
 
 try:
-    from sixdrepnet.model import (
+    from QES6D.model import (
         SixDRepNet,
         SixDRepNet_o,
         SixDRepNet_StrongHead,
         SixDRepNet_EffNetV2,
         SixDRepNet_EffNetV2_Advanced,
     )
-    from sixdrepnet.pseudo_label_generator import PseudoLabelGenerator
-    from sixdrepnet import utils as sixd_utils
+    from QES6D.pseudo_label_generator import PseudoLabelGenerator
+    from QES6D import utils as sixd_utils
 except Exception:
     from model import (
         SixDRepNet,

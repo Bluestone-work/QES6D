@@ -14,12 +14,12 @@ from torchvision import transforms
 from tqdm import tqdm
 
 _PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
-_SIXDREPNET_DIR = os.path.join(_PROJECT_DIR, 'sixdrepnet')
+_QES6D_DIR = os.path.join(_PROJECT_DIR, 'QES6D')
 
 if _PROJECT_DIR not in sys.path:
     sys.path.insert(0, _PROJECT_DIR)
-if _SIXDREPNET_DIR not in sys.path:
-    sys.path.insert(0, _SIXDREPNET_DIR)
+if _QES6D_DIR not in sys.path:
+    sys.path.insert(0, _QES6D_DIR)
 
 
 def _load_module_from_path(module_name, file_path):
@@ -32,12 +32,12 @@ def _load_module_from_path(module_name, file_path):
 
 
 _MODEL_MODULE = _load_module_from_path(
-    'sixdrepnet_local_model',
-    os.path.join(_PROJECT_DIR, 'sixdrepnet', 'model.py')
+    'QES6D_local_model',
+    os.path.join(_PROJECT_DIR, 'QES6D', 'model.py')
 )
 _UTILS_MODULE = _load_module_from_path(
-    'sixdrepnet_local_utils',
-    os.path.join(_PROJECT_DIR, 'sixdrepnet', 'utils.py')
+    'QES6D_local_utils',
+    os.path.join(_PROJECT_DIR, 'QES6D', 'utils.py')
 )
 
 SixDRepNet = _MODEL_MODULE.SixDRepNet
@@ -451,7 +451,7 @@ def load_model(snapshot_path, device, model_variant='auto', model_use_se='auto',
         ).to(device)
     elif model_variant == 'convnextv2':
         if SixDRepNet_ConvNeXtV2 is None:
-            raise ImportError('SixDRepNet_ConvNeXtV2 is not available in local sixdrepnet/model.py')
+            raise ImportError('SixDRepNet_ConvNeXtV2 is not available in local QES6D/model.py')
         model = SixDRepNet_ConvNeXtV2(
             backbone_name=_infer_convnext_backbone_from_sources(checkpoint, snapshot_path),
             pretrained=True,
@@ -462,7 +462,7 @@ def load_model(snapshot_path, device, model_variant='auto', model_use_se='auto',
         ).to(device)
     elif model_variant == 'effnetv2_advanced':
         if SixDRepNet_EffNetV2_Advanced is None:
-            raise ImportError('SixDRepNet_EffNetV2_Advanced is not available in local sixdrepnet/model.py')
+            raise ImportError('SixDRepNet_EffNetV2_Advanced is not available in local QES6D/model.py')
         model = SixDRepNet_EffNetV2_Advanced(
             pretrained=True,
             use_coordconv=True,
@@ -676,14 +676,14 @@ def predict_deg(model, x):
 
 def load_local_datasets_module():
     candidates = [
-        os.path.join(_PROJECT_DIR, 'sixdrepnet', 'datasets.py'),
+        os.path.join(_PROJECT_DIR, 'QES6D', 'datasets.py'),
         os.path.join(_PROJECT_DIR, 'datasets.py'),
     ]
     datasets_py = next((p for p in candidates if os.path.isfile(p)), None)
     if datasets_py is None:
         raise FileNotFoundError(f"datasets.py not found. Tried: {candidates}")
 
-    spec = importlib.util.spec_from_file_location('sixdrepnet_local_datasets', datasets_py)
+    spec = importlib.util.spec_from_file_location('QES6D_local_datasets', datasets_py)
     if spec is None or spec.loader is None:
         raise ImportError(f"Failed to create import spec for {datasets_py}")
     datasets_module = importlib.util.module_from_spec(spec)

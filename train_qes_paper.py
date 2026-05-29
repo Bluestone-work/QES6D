@@ -35,13 +35,13 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, MultiStepLR
 from tqdm import tqdm
 
 try:
-    from sixdrepnet.model import (
+    from QES6D.model import (
         SixDRepNet, SixDRepNet_o, SixDRepNet_StrongHead,
         SixDRepNet_EffNetV2, SixDRepNet_EffNetV2_Advanced,
     )
-    from sixdrepnet.semi_supervised_datasets import create_semi_supervised_dataloaders
-    from sixdrepnet.loss import GeodesicPlusAxisLoss, RobustEulerAxisLoss
-    import sixdrepnet.utils as utils
+    from QES6D.semi_supervised_datasets import create_semi_supervised_dataloaders
+    from QES6D.loss import GeodesicPlusAxisLoss, RobustEulerAxisLoss
+    import QES6D.utils as utils
 except ImportError:
     from model import (
         SixDRepNet, SixDRepNet_o, SixDRepNet_StrongHead,
@@ -457,7 +457,7 @@ def build_val_loader(val_data_dir, val_filename_list, batch_size, num_workers):
     from torchvision import transforms
     from torch.utils.data import DataLoader
     try:
-        from sixdrepnet.semi_supervised_datasets import FlatNPZPoseDataset
+        from QES6D.semi_supervised_datasets import FlatNPZPoseDataset
     except ImportError:
         from semi_supervised_datasets import FlatNPZPoseDataset
 
@@ -553,7 +553,7 @@ def build_val_loader(val_data_dir, val_filename_list, batch_size, num_workers):
         # 仅从项目内加载，避免误导入外部同名 datasets 包
         project_root = os.path.dirname(__file__)
         candidate_paths = [
-            os.path.join(project_root, 'sixdrepnet', 'datasets.py'),
+            os.path.join(project_root, 'QES6D', 'datasets.py'),
             os.path.join(project_root, 'datasets.py'),
         ]
         datasets_py = next((p for p in candidate_paths if os.path.isfile(p)), None)
@@ -562,7 +562,7 @@ def build_val_loader(val_data_dir, val_filename_list, batch_size, num_workers):
                 f"Validation fallback dataset file not found. Tried: {candidate_paths}"
             )
 
-        spec = importlib.util.spec_from_file_location('sixdrepnet_local_datasets', datasets_py)
+        spec = importlib.util.spec_from_file_location('QES6D_local_datasets', datasets_py)
         if spec is None or spec.loader is None:
             raise ImportError(f"Failed to create import spec for {datasets_py}")
         datasets_module = importlib.util.module_from_spec(spec)

@@ -15,10 +15,10 @@ QES6D is not only an inference wrapper. The main experiment path is the two-stag
 - `train_qes_paper.py`: paper training implementation.
 - `generate_pseudo_labels.py`: pseudo-label generation and refresh entry.
 - `eval_qes_paper.py`: unified benchmark and diagnostic evaluation.
-- `sixdrepnet/model.py`: QES6D model variants, including EfficientNetV2-based 6D rotation regression.
-- `sixdrepnet/loss.py`: QES6D losses, including `GeodesicPlusAxisLoss` and `RobustEulerAxisLoss`.
-- `sixdrepnet/semi_supervised_datasets.py`: labeled/pseudo semi-supervised dataset composition, filtering, reliability, and curriculum support.
-- `sixdrepnet/pseudo_label_generator.py`: TTA, face-crop export, confidence, and consensus pseudo-label logic.
+- `QES6D/model.py`: QES6D model variants, including EfficientNetV2-based 6D rotation regression.
+- `QES6D/loss.py`: QES6D losses, including `GeodesicPlusAxisLoss` and `RobustEulerAxisLoss`.
+- `QES6D/semi_supervised_datasets.py`: labeled/pseudo semi-supervised dataset composition, filtering, reliability, and curriculum support.
+- `QES6D/pseudo_label_generator.py`: TTA, face-crop export, confidence, and consensus pseudo-label logic.
 - `docs/QES6D_Manuscript_KBS_repaired_no_classroom_labels.tex`: manuscript copy with clarified metric definitions.
 
 ## Environment

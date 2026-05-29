@@ -15,7 +15,7 @@ from torch.utils.data import Dataset
 from PIL import Image, ImageFilter
 
 try:
-    import sixdrepnet.utils as pose_utils
+    import QES6D.utils as pose_utils
 except ImportError:
     import utils as pose_utils
 
@@ -893,7 +893,7 @@ def collate_fn_semi_supervised(batch):
 
 def _load_local_datasets_module():
     datasets_py = os.path.join(os.path.dirname(__file__), 'datasets.py')
-    spec = importlib.util.spec_from_file_location('sixdrepnet_local_datasets', datasets_py)
+    spec = importlib.util.spec_from_file_location('QES6D_local_datasets', datasets_py)
     datasets_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(datasets_module)
     return datasets_module
