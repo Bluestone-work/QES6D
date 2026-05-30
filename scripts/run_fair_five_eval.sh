@@ -11,7 +11,7 @@ AXIS_SIZE="${AXIS_SIZE:-70}"
 ACC_THRESHOLD="${ACC_THRESHOLD:-10}"
 MAX_SAMPLES_BIWI="${MAX_SAMPLES_BIWI:--1}"
 MAX_SAMPLES_AFLW="${MAX_SAMPLES_AFLW:--1}"
-ONLY_CUSTOM_SIXD="${ONLY_CUSTOM_SIXD:-0}"   # 1: run only custom QES 6DRepNet (for ablation)
+ONLY_CUSTOM_QES6D="${ONLY_CUSTOM_QES6D:-0}"   # 1: run only custom QES6D (for ablation)
 CONTINUE_ON_ERROR="${CONTINUE_ON_ERROR:-0}" # 1: do not abort whole suite on single-job failure
 SAVE_ALL_LABELED_ERRORS="${SAVE_ALL_LABELED_ERRORS:-1}"
 BUILD_STATS_REPORT="${BUILD_STATS_REPORT:-1}"
@@ -20,7 +20,7 @@ STATS_PERMUTATION_ITERS="${STATS_PERMUTATION_ITERS:-10000}"
 CLASSROOM_NOGT_ENABLE="${CLASSROOM_NOGT_ENABLE:-0}"
 CLASSROOM_NOGT_DATA_DIR="${CLASSROOM_NOGT_DATA_DIR:-/root/autodl-tmp/data_test}"
 CLASSROOM_NOGT_MAX_SAMPLES="${CLASSROOM_NOGT_MAX_SAMPLES:--1}"
-CLASSROOM_NOGT_YOLO_WEIGHTS="${CLASSROOM_NOGT_YOLO_WEIGHTS:-/root/autodl-tmp/6DRepNet/facedat/yolo11x.pt}"
+CLASSROOM_NOGT_YOLO_WEIGHTS="${CLASSROOM_NOGT_YOLO_WEIGHTS:-/root/autodl-tmp/QES6D/facedat/yolo11x.pt}"
 # CLASSROOM_NOGT_PERSON_WEIGHTS="${CLASS  ROOM_NOGT_PERSON_WEIGHTS:-}"
 
 OUT_ROOT="${OUT_ROOT:-/root/autodl-tmp/fair_eval_runs}"
@@ -55,15 +55,15 @@ mkdir -p "${TMP_DIR}/empty_biwi_dir"
 
 export CUDA_VISIBLE_DEVICES="${GPU_ID}"
 
-SIXD_REPO="${SIXD_REPO:-/root/autodl-tmp/6DRepNet/sixdrepnet}"
-SIXD_CKPT="${SIXD_CKPT:-/root/autodl-tmp/6DRepNet/pre_trained_model/6DRepNet_300W_LP_AFLW2000.pth}"
-CUSTOM_SIXD_ENABLE="${CUSTOM_SIXD_ENABLE:-1}"
-CUSTOM_SIXD_CKPT="${CUSTOM_SIXD_CKPT:-/root/autodl-tmp/output/qes_paper_runs/stage2_from_pseudo_refresh_moderate/best_model.pth}"
-CUSTOM_SIXD_MODEL_VARIANT="${CUSTOM_SIXD_MODEL_VARIANT:-effnetv2}"
-CUSTOM_SIXD_YOLO_WEIGHTS="${CUSTOM_SIXD_YOLO_WEIGHTS:-/root/autodl-tmp/6DRepNet/facedat/yolo11x.pt}"
-CUSTOM_SIXD_GFPGAN_MODEL="${CUSTOM_SIXD_GFPGAN_MODEL:-/root/autodl-tmp/models/GFPGANv1.3.pth}"
-CUSTOM_SIXD_USE_YOLO="${CUSTOM_SIXD_USE_YOLO:-0}"
-CUSTOM_SIXD_USE_GFPGAN="${CUSTOM_SIXD_USE_GFPGAN:-0}"
+QES6D_REPO="${QES6D_REPO:-/root/autodl-tmp/QES6D/QES6D}"
+QES6D_CKPT="${QES6D_CKPT:-/root/autodl-tmp/QES6D/weights/QES6D_300W_LP_AFLW2000.pth}"
+CUSTOM_QES6D_ENABLE="${CUSTOM_QES6D_ENABLE:-1}"
+CUSTOM_QES6D_CKPT="${CUSTOM_QES6D_CKPT:-/root/autodl-tmp/output/qes_paper_runs/stage2_from_pseudo_refresh_moderate/best_model.pth}"
+CUSTOM_QES6D_MODEL_VARIANT="${CUSTOM_QES6D_MODEL_VARIANT:-effnetv2}"
+CUSTOM_QES6D_YOLO_WEIGHTS="${CUSTOM_QES6D_YOLO_WEIGHTS:-/root/autodl-tmp/QES6D/facedat/yolo11x.pt}"
+CUSTOM_QES6D_GFPGAN_MODEL="${CUSTOM_QES6D_GFPGAN_MODEL:-/root/autodl-tmp/models/GFPGANv1.3.pth}"
+CUSTOM_QES6D_USE_YOLO="${CUSTOM_QES6D_USE_YOLO:-0}"
+CUSTOM_QES6D_USE_GFPGAN="${CUSTOM_QES6D_USE_GFPGAN:-0}"
 
 FSA_REPO="${FSA_REPO:-/root/autodl-tmp/FSA-Net}"
 FSA_TRAIN_DB="${FSA_TRAIN_DB:-300W_LP}"
@@ -88,8 +88,8 @@ DAD3D_REPO="${DAD3D_REPO:-/root/autodl-tmp/DAD-3DHeads}"
 BIWI_NPZ="${BIWI_NPZ:-/root/autodl-tmp/BIWI_noTrack.npz}"
 AFLW2000_DIR="${AFLW2000_DIR:-/root/autodl-tmp/AFLW2000}"
 AFLW2000_LIST="${AFLW2000_LIST:-/root/autodl-tmp/AFLW2000/files.txt}"
-CUSTOM_SIXD_BIWI_DATA_DIR="${CUSTOM_SIXD_BIWI_DATA_DIR:-/root/autodl-tmp/biwi}"
-CUSTOM_SIXD_AFLW_DATA_DIR="${CUSTOM_SIXD_AFLW_DATA_DIR:-${AFLW2000_DIR}}"
+CUSTOM_QES6D_BIWI_DATA_DIR="${CUSTOM_QES6D_BIWI_DATA_DIR:-/root/autodl-tmp/biwi}"
+CUSTOM_QES6D_AFLW_DATA_DIR="${CUSTOM_QES6D_AFLW_DATA_DIR:-${AFLW2000_DIR}}"
 NO_GT_DATA_DIR="${NO_GT_DATA_DIR:-}"
 NO_GT_INPUT_LIST="${NO_GT_INPUT_LIST:-}"
 
@@ -104,26 +104,26 @@ fairness_protocol:
     - BIWI: shared BIWI_noTrack.npz raw frames
     - AFLW2000: shared landmark-square crop before model-specific resize
   note:
-    - 6DRepNet is split into BIWI and AFLW2000 runs because its script evaluates one labeled dataset per run.
+    - QES6D baseline is split into BIWI and AFLW2000 runs because its script evaluates one labeled dataset per run.
     - Use labeled metrics and classroom_augmentation_consistency_deg for the paper table.
-    - Custom 6DRepNet checkpoint uses manual-style eval flow by default (no YOLO/GFPGAN, BIWI data_dir points to real BIWI frames).
+    - Custom QES6D checkpoint uses manual-style eval flow by default (no YOLO/GFPGAN, BIWI data_dir points to real BIWI frames).
     - DAD-3DNet is evaluated with the same BIWI/AFLW2000 protocol and unified heavy-viz style.
 EOF
 
 declare -a JOB_NAMES=()
 declare -a JOB_PIDS=()
 
-SIXD_BIWI_DATA_DIR="${TMP_DIR}/empty_biwi_dir"
-SIXD_AFLW_DATA_DIR="${AFLW2000_DIR}"
-declare -a SIXD_NO_GT_INPUT_ARGS=(--input_list "${TMP_DIR}/empty_inputs.txt")
+QES6D_BIWI_DATA_DIR="${TMP_DIR}/empty_biwi_dir"
+QES6D_AFLW_DATA_DIR="${AFLW2000_DIR}"
+declare -a QES6D_NO_GT_INPUT_ARGS=(--input_list "${TMP_DIR}/empty_inputs.txt")
 
 if [[ -n "${NO_GT_DATA_DIR}" ]]; then
-  SIXD_BIWI_DATA_DIR="${NO_GT_DATA_DIR}"
-  SIXD_AFLW_DATA_DIR="${NO_GT_DATA_DIR}"
+  QES6D_BIWI_DATA_DIR="${NO_GT_DATA_DIR}"
+  QES6D_AFLW_DATA_DIR="${NO_GT_DATA_DIR}"
   if [[ -n "${NO_GT_INPUT_LIST}" ]]; then
-    SIXD_NO_GT_INPUT_ARGS=(--input_list "${NO_GT_INPUT_LIST}")
+    QES6D_NO_GT_INPUT_ARGS=(--input_list "${NO_GT_INPUT_LIST}")
   else
-    SIXD_NO_GT_INPUT_ARGS=()
+    QES6D_NO_GT_INPUT_ARGS=()
   fi
 fi
 
@@ -182,7 +182,7 @@ write_summary() {
       --output-ci-csv "${STATS_CI_CSV}" \
       --output-pvalue-csv "${STATS_PVALUE_CSV}" \
       --anchor-method QES6D \
-      --baseline-method 6DRepNet \
+      --baseline-method QES6D \
       --bootstrap-iters "${STATS_BOOTSTRAP_ITERS}" \
       --permutation-iters "${STATS_PERMUTATION_ITERS}"
   fi
@@ -217,24 +217,24 @@ run_classroom_nogt_eval() {
 import json
 models = []
 
-only_custom = "${ONLY_CUSTOM_SIXD}" == "1"
-custom_enable = "${CUSTOM_SIXD_ENABLE}" != "0"
+only_custom = "${ONLY_CUSTOM_QES6D}" == "1"
+custom_enable = "${CUSTOM_QES6D_ENABLE}" != "0"
 
-if (not only_custom) and "${SIXD_CKPT}":
+if (not only_custom) and "${QES6D_CKPT}":
     models.append({
-        "name": "6DRepNet",
-        "family": "sixdrepnet",
-        "ckpt": "${SIXD_CKPT}",
+        "name": "QES6D",
+        "family": "QES6D",
+        "ckpt": "${QES6D_CKPT}",
         "variant": "auto",
         "enabled": True,
     })
 
-if custom_enable and "${CUSTOM_SIXD_CKPT}":
+if custom_enable and "${CUSTOM_QES6D_CKPT}":
     models.append({
         "name": "QES6D",
-        "family": "sixdrepnet",
-        "ckpt": "${CUSTOM_SIXD_CKPT}",
-        "variant": "${CUSTOM_SIXD_MODEL_VARIANT}",
+        "family": "QES6D",
+        "ckpt": "${CUSTOM_QES6D_CKPT}",
+        "variant": "${CUSTOM_QES6D_MODEL_VARIANT}",
         "enabled": True,
     })
 
@@ -292,7 +292,7 @@ PY
   echo "[$(timestamp_now)] [start] classroom_nogt_compare"
   echo "[$(timestamp_now)] [log] ${log_path}"
   if (
-    cd /root/autodl-tmp/6DRepNet/tools
+    cd /root/autodl-tmp/QES6D/tools
     python eval_classroom_nogt_tracking_compare.py \
       --models_json "${CLASSROOM_NOGT_MODELS_JSON}" \
       --data_dir "${CLASSROOM_NOGT_DATA_DIR}" \
@@ -407,17 +407,17 @@ run_job_in_conda() {
   fi
 }
 
-if [[ "${ONLY_CUSTOM_SIXD}" == "1" ]]; then
-  echo "[$(timestamp_now)] [mode] ONLY_CUSTOM_SIXD=1 (skip baseline families)"
+if [[ "${ONLY_CUSTOM_QES6D}" == "1" ]]; then
+  echo "[$(timestamp_now)] [mode] ONLY_CUSTOM_QES6D=1 (skip baseline families)"
 else
-  if should_skip_job "${JSON_DIR}/6drepnet_biwi.json"; then
-    echo "[$(timestamp_now)] [skip] 6drepnet_biwi"
+  if should_skip_job "${JSON_DIR}/QES6D_biwi.json"; then
+    echo "[$(timestamp_now)] [skip] QES6D_biwi"
   else
-    run_job "6drepnet_biwi" "${SIXD_REPO}" \
+    run_job "QES6D_biwi" "${QES6D_REPO}" \
       python eval_no_gt_labeled_heavyviz_v4_norot.py \
-      --model_path "${SIXD_CKPT}" \
-      --data_dir "${SIXD_BIWI_DATA_DIR}" \
-      "${SIXD_NO_GT_INPUT_ARGS[@]}" \
+      --model_path "${QES6D_CKPT}" \
+      --data_dir "${QES6D_BIWI_DATA_DIR}" \
+      "${QES6D_NO_GT_INPUT_ARGS[@]}" \
       --eval_with_labels \
       --dataset BIWI \
       --filename_list "${BIWI_NPZ}" \
@@ -427,22 +427,22 @@ else
       --labeled_batch_size 32 \
       --labeled_num_workers 2 \
       --save_viz \
-      --viz_dir "${VIZ_DIR}/6drepnet_biwi" \
+      --viz_dir "${VIZ_DIR}/QES6D_biwi" \
       --viz_every "${VIZ_EVERY}" \
       --viz_max "${VIZ_MAX}" \
       --axis_size "${AXIS_SIZE}" \
       "${ALL_LABELED_ERRORS_ARGS[@]}" \
-      --output_json "${JSON_DIR}/6drepnet_biwi.json"
+      --output_json "${JSON_DIR}/QES6D_biwi.json"
   fi
 
-  if should_skip_job "${JSON_DIR}/6drepnet_aflw2000.json"; then
-    echo "[$(timestamp_now)] [skip] 6drepnet_aflw2000"
+  if should_skip_job "${JSON_DIR}/QES6D_aflw2000.json"; then
+    echo "[$(timestamp_now)] [skip] QES6D_aflw2000"
   else
-    run_job "6drepnet_aflw2000" "${SIXD_REPO}" \
+    run_job "QES6D_aflw2000" "${QES6D_REPO}" \
       python eval_no_gt_labeled_heavyviz_v4_norot.py \
-      --model_path "${SIXD_CKPT}" \
-      --data_dir "${SIXD_AFLW_DATA_DIR}" \
-      "${SIXD_NO_GT_INPUT_ARGS[@]}" \
+      --model_path "${QES6D_CKPT}" \
+      --data_dir "${QES6D_AFLW_DATA_DIR}" \
+      "${QES6D_NO_GT_INPUT_ARGS[@]}" \
       --eval_with_labels \
       --dataset AFLW2000 \
       --filename_list "${AFLW2000_LIST}" \
@@ -452,65 +452,65 @@ else
       --labeled_batch_size 32 \
       --labeled_num_workers 2 \
       --save_viz \
-      --viz_dir "${VIZ_DIR}/6drepnet_aflw2000" \
+      --viz_dir "${VIZ_DIR}/QES6D_aflw2000" \
       --viz_every "${VIZ_EVERY}" \
       --viz_max "${VIZ_MAX}" \
       --axis_size "${AXIS_SIZE}" \
       "${ALL_LABELED_ERRORS_ARGS[@]}" \
-      --output_json "${JSON_DIR}/6drepnet_aflw2000.json"
+      --output_json "${JSON_DIR}/QES6D_aflw2000.json"
   fi
 fi
 
-if [[ "${CUSTOM_SIXD_ENABLE}" != "0" ]]; then
-  if [[ ! -f "${CUSTOM_SIXD_CKPT}" ]]; then
-    echo "[$(timestamp_now)] [failed] missing custom 6DRepNet checkpoint: ${CUSTOM_SIXD_CKPT}" >&2
+if [[ "${CUSTOM_QES6D_ENABLE}" != "0" ]]; then
+  if [[ ! -f "${CUSTOM_QES6D_CKPT}" ]]; then
+    echo "[$(timestamp_now)] [failed] missing custom QES6D checkpoint: ${CUSTOM_QES6D_CKPT}" >&2
     exit 1
   fi
-  if [[ ! -d "${CUSTOM_SIXD_BIWI_DATA_DIR}" ]]; then
-    echo "[$(timestamp_now)] [failed] missing BIWI dir for custom 6DRepNet eval: ${CUSTOM_SIXD_BIWI_DATA_DIR}" >&2
+  if [[ ! -d "${CUSTOM_QES6D_BIWI_DATA_DIR}" ]]; then
+    echo "[$(timestamp_now)] [failed] missing BIWI dir for custom QES6D eval: ${CUSTOM_QES6D_BIWI_DATA_DIR}" >&2
     exit 1
   fi
-  if [[ ! -d "${CUSTOM_SIXD_AFLW_DATA_DIR}" ]]; then
-    echo "[$(timestamp_now)] [failed] missing AFLW dir for custom 6DRepNet eval: ${CUSTOM_SIXD_AFLW_DATA_DIR}" >&2
+  if [[ ! -d "${CUSTOM_QES6D_AFLW_DATA_DIR}" ]]; then
+    echo "[$(timestamp_now)] [failed] missing AFLW dir for custom QES6D eval: ${CUSTOM_QES6D_AFLW_DATA_DIR}" >&2
     exit 1
   fi
-  if [[ "${CUSTOM_SIXD_USE_YOLO}" == "1" && ! -f "${CUSTOM_SIXD_YOLO_WEIGHTS}" ]]; then
-    echo "[$(timestamp_now)] [failed] missing YOLO weights for custom 6DRepNet eval: ${CUSTOM_SIXD_YOLO_WEIGHTS}" >&2
+  if [[ "${CUSTOM_QES6D_USE_YOLO}" == "1" && ! -f "${CUSTOM_QES6D_YOLO_WEIGHTS}" ]]; then
+    echo "[$(timestamp_now)] [failed] missing YOLO weights for custom QES6D eval: ${CUSTOM_QES6D_YOLO_WEIGHTS}" >&2
     exit 1
   fi
-  if [[ "${CUSTOM_SIXD_USE_GFPGAN}" == "1" && ! -f "${CUSTOM_SIXD_GFPGAN_MODEL}" ]]; then
-    echo "[$(timestamp_now)] [failed] missing GFPGAN weights for custom 6DRepNet eval: ${CUSTOM_SIXD_GFPGAN_MODEL}" >&2
+  if [[ "${CUSTOM_QES6D_USE_GFPGAN}" == "1" && ! -f "${CUSTOM_QES6D_GFPGAN_MODEL}" ]]; then
+    echo "[$(timestamp_now)] [failed] missing GFPGAN weights for custom QES6D eval: ${CUSTOM_QES6D_GFPGAN_MODEL}" >&2
     exit 1
   fi
 fi
 
-declare -a CUSTOM_SIXD_PREPROC_ARGS=()
-if [[ "${CUSTOM_SIXD_USE_YOLO}" == "1" ]]; then
-  CUSTOM_SIXD_PREPROC_ARGS+=(
+declare -a CUSTOM_QES6D_PREPROC_ARGS=()
+if [[ "${CUSTOM_QES6D_USE_YOLO}" == "1" ]]; then
+  CUSTOM_QES6D_PREPROC_ARGS+=(
     --use_yolo
     --yolo_version yolov11
-    --yolo_weights "${CUSTOM_SIXD_YOLO_WEIGHTS}"
+    --yolo_weights "${CUSTOM_QES6D_YOLO_WEIGHTS}"
   )
 fi
-if [[ "${CUSTOM_SIXD_USE_GFPGAN}" == "1" ]]; then
-  CUSTOM_SIXD_PREPROC_ARGS+=(
+if [[ "${CUSTOM_QES6D_USE_GFPGAN}" == "1" ]]; then
+  CUSTOM_QES6D_PREPROC_ARGS+=(
     --use_gfpgan
-    --gfpgan_model "${CUSTOM_SIXD_GFPGAN_MODEL}"
+    --gfpgan_model "${CUSTOM_QES6D_GFPGAN_MODEL}"
   )
 fi
 
-if [[ "${CUSTOM_SIXD_ENABLE}" == "0" ]]; then
-  echo "[$(timestamp_now)] [skip] 6drepnet_qes_effnetv2_biwi (disabled)"
-elif should_skip_job "${JSON_DIR}/6drepnet_qes_effnetv2_biwi.json"; then
-  echo "[$(timestamp_now)] [skip] 6drepnet_qes_effnetv2_biwi"
+if [[ "${CUSTOM_QES6D_ENABLE}" == "0" ]]; then
+  echo "[$(timestamp_now)] [skip] QES6D_effnetv2_biwi (disabled)"
+elif should_skip_job "${JSON_DIR}/QES6D_effnetv2_biwi.json"; then
+  echo "[$(timestamp_now)] [skip] QES6D_effnetv2_biwi"
 else
-  run_job "6drepnet_qes_effnetv2_biwi" "${SIXD_REPO}" \
+  run_job "QES6D_effnetv2_biwi" "${QES6D_REPO}" \
     python eval_no_gt_labeled_heavyviz_v4_norot.py \
-    --model_path "${CUSTOM_SIXD_CKPT}" \
-    --model_variant "${CUSTOM_SIXD_MODEL_VARIANT}" \
-    "${CUSTOM_SIXD_PREPROC_ARGS[@]}" \
-    --data_dir "${CUSTOM_SIXD_BIWI_DATA_DIR}" \
-    "${SIXD_NO_GT_INPUT_ARGS[@]}" \
+    --model_path "${CUSTOM_QES6D_CKPT}" \
+    --model_variant "${CUSTOM_QES6D_MODEL_VARIANT}" \
+    "${CUSTOM_QES6D_PREPROC_ARGS[@]}" \
+    --data_dir "${CUSTOM_QES6D_BIWI_DATA_DIR}" \
+    "${QES6D_NO_GT_INPUT_ARGS[@]}" \
     --eval_with_labels \
     --dataset BIWI \
     --filename_list "${BIWI_NPZ}" \
@@ -520,26 +520,26 @@ else
     --labeled_batch_size 32 \
     --labeled_num_workers 2 \
     --save_viz \
-    --viz_dir "${VIZ_DIR}/6drepnet_qes_effnetv2_biwi" \
+    --viz_dir "${VIZ_DIR}/QES6D_effnetv2_biwi" \
     --viz_every "${VIZ_EVERY}" \
     --viz_max "${VIZ_MAX}" \
     --axis_size "${AXIS_SIZE}" \
     "${ALL_LABELED_ERRORS_ARGS[@]}" \
-    --output_json "${JSON_DIR}/6drepnet_qes_effnetv2_biwi.json"
+    --output_json "${JSON_DIR}/QES6D_effnetv2_biwi.json"
 fi
 
-if [[ "${CUSTOM_SIXD_ENABLE}" == "0" ]]; then
-  echo "[$(timestamp_now)] [skip] 6drepnet_qes_effnetv2_aflw2000 (disabled)"
-elif should_skip_job "${JSON_DIR}/6drepnet_qes_effnetv2_aflw2000.json"; then
-  echo "[$(timestamp_now)] [skip] 6drepnet_qes_effnetv2_aflw2000"
+if [[ "${CUSTOM_QES6D_ENABLE}" == "0" ]]; then
+  echo "[$(timestamp_now)] [skip] QES6D_effnetv2_aflw2000 (disabled)"
+elif should_skip_job "${JSON_DIR}/QES6D_effnetv2_aflw2000.json"; then
+  echo "[$(timestamp_now)] [skip] QES6D_effnetv2_aflw2000"
 else
-  run_job "6drepnet_qes_effnetv2_aflw2000" "${SIXD_REPO}" \
+  run_job "QES6D_effnetv2_aflw2000" "${QES6D_REPO}" \
     python eval_no_gt_labeled_heavyviz_v4_norot.py \
-    --model_path "${CUSTOM_SIXD_CKPT}" \
-    --model_variant "${CUSTOM_SIXD_MODEL_VARIANT}" \
-    "${CUSTOM_SIXD_PREPROC_ARGS[@]}" \
-    --data_dir "${CUSTOM_SIXD_AFLW_DATA_DIR}" \
-    "${SIXD_NO_GT_INPUT_ARGS[@]}" \
+    --model_path "${CUSTOM_QES6D_CKPT}" \
+    --model_variant "${CUSTOM_QES6D_MODEL_VARIANT}" \
+    "${CUSTOM_QES6D_PREPROC_ARGS[@]}" \
+    --data_dir "${CUSTOM_QES6D_AFLW_DATA_DIR}" \
+    "${QES6D_NO_GT_INPUT_ARGS[@]}" \
     --eval_with_labels \
     --dataset AFLW2000 \
     --filename_list "${AFLW2000_LIST}" \
@@ -549,15 +549,15 @@ else
     --labeled_batch_size 32 \
     --labeled_num_workers 2 \
     --save_viz \
-    --viz_dir "${VIZ_DIR}/6drepnet_qes_effnetv2_aflw2000" \
+    --viz_dir "${VIZ_DIR}/QES6D_effnetv2_aflw2000" \
     --viz_every "${VIZ_EVERY}" \
     --viz_max "${VIZ_MAX}" \
     --axis_size "${AXIS_SIZE}" \
     "${ALL_LABELED_ERRORS_ARGS[@]}" \
-    --output_json "${JSON_DIR}/6drepnet_qes_effnetv2_aflw2000.json"
+    --output_json "${JSON_DIR}/QES6D_effnetv2_aflw2000.json"
 fi
 
-if [[ "${ONLY_CUSTOM_SIXD}" != "1" ]]; then
+if [[ "${ONLY_CUSTOM_QES6D}" != "1" ]]; then
   if should_skip_job "${JSON_DIR}/fsanet.json"; then
     echo "[$(timestamp_now)] [skip] fsanet"
   else

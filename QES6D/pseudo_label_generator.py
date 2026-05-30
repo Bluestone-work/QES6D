@@ -75,7 +75,7 @@
 
 # class PseudoLabelGenerator:
 #     """
-#     使用预训练的6DRepNet模型为无标签数据生成伪标签
+#     使用预训练的QES6D模型为无标签数据生成伪标签
 #     """
 #     def __init__(self, 
 #                  model,
@@ -91,7 +91,7 @@
 #                  min_face_size=20):
 #         """
 #         Args:
-#             model: 预训练的6DRepNet模型
+#             model: 预训练的QES6D模型
 #             device: 运行设备
 #             confidence_threshold: 置信度阈值
 #             use_tta: 是否使用测试时增强

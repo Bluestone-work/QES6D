@@ -299,8 +299,8 @@ class PseudoLabelDataset(Dataset):
             model_path = gfpgan_model_path
             if model_path is None:
                 for candidate in [
-                    '/root/6DRepNet/gfpgan/weights/GFPGANv1.4.pth',
-                    '/root/6DRepNet/gfpgan/weights/GFPGANv1.3.pth',
+                    '/root/autodl-tmp/QES6D/gfpgan/weights/GFPGANv1.4.pth',
+                    '/root/autodl-tmp/QES6D/gfpgan/weights/GFPGANv1.3.pth',
                     '/root/miniconda3/envs/hopenet/lib/python3.10/site-packages/gfpgan/weights/GFPGANv1.3.pth'
                 ]:
                     if os.path.exists(candidate):
@@ -967,8 +967,8 @@ def create_semi_supervised_dataloaders(
     else:
         datasets_module = _load_local_datasets_module()
 
-        if hasattr(datasets_module, 'SixDRepNet_Dataset'):
-            dataset_cls = datasets_module.SixDRepNet_Dataset
+        if hasattr(datasets_module, 'QES6D_Dataset'):
+            dataset_cls = datasets_module.QES6D_Dataset
         elif os.path.isdir(labeled_data_dir) and hasattr(datasets_module, 'Pose_300W_LP'):
             dataset_cls = datasets_module.Pose_300W_LP
         elif hasattr(datasets_module, 'BIWI'):

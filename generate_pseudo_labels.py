@@ -16,21 +16,21 @@ from torchvision import transforms
 
 try:
     from QES6D.model import (
-        SixDRepNet,
-        SixDRepNet_o,
-        SixDRepNet_StrongHead,
-        SixDRepNet_EffNetV2,
-        SixDRepNet_EffNetV2_Advanced,
+        QES6D,
+        QES6D_o,
+        QES6D_StrongHead,
+        QES6D_EffNetV2,
+        QES6D_EffNetV2_Advanced,
     )
     from QES6D.pseudo_label_generator import PseudoLabelGenerator
     from QES6D import utils as sixd_utils
 except Exception:
     from model import (
-        SixDRepNet,
-        SixDRepNet_o,
-        SixDRepNet_StrongHead,
-        SixDRepNet_EffNetV2,
-        SixDRepNet_EffNetV2_Advanced,
+        QES6D,
+        QES6D_o,
+        QES6D_StrongHead,
+        QES6D_EffNetV2,
+        QES6D_EffNetV2_Advanced,
     )
     from pseudo_label_generator import PseudoLabelGenerator
     import utils as sixd_utils
@@ -70,8 +70,8 @@ def parse_args():
 
     parser.add_argument('--model_path', type=str, required=True,
                         help='Path to primary model checkpoint')
-    parser.add_argument('--model_variant', type=str, default='sixdrepnet_o',
-                        choices=['sixdrepnet', 'sixdrepnet_o', 'strong_head', 'effnetv2', 'effnetv2_advanced'],
+    parser.add_argument('--model_variant', type=str, default='QES6D_o',
+                        choices=['QES6D', 'QES6D_o', 'strong_head', 'effnetv2', 'effnetv2_advanced'],
                         help='Primary model variant')
     parser.add_argument('--aux_model_path', nargs='+', action='append', default=None,
                         help='Optional auxiliary model checkpoints for consensus. Can be repeated.')
@@ -83,7 +83,7 @@ def parse_args():
     parser.add_argument('--output_file', type=str, required=True,
                         help='Output file path for pseudo labels (npz format)')
     parser.add_argument('--backbone_file', type=str,
-                        default='/root/6DRepNet/sixdrepnet/RepVGG-B1g2-train.pth',
+                        default='/root/autodl-tmp/QES6D/QES6D/RepVGG-B1g2-train.pth',
                         help='Backbone pretrained weights for RepVGG-based variants')
     parser.add_argument('--effnet_backbone', type=str, default='efficientnet_v2_l',
                         choices=['efficientnet_v2_s', 'efficientnet_v2_m', 'efficientnet_v2_l'],
@@ -139,23 +139,23 @@ def parse_args():
 
 
 def build_model(variant, args):
-    variant = str(variant).lower()
-    if variant == 'sixdrepnet_o':
-        return SixDRepNet_o(
+    variant = str(variant).strip().upper()
+    if variant == 'QES6D_O':
+        return QES6D_o(
             backbone_name='RepVGG-B1g2',
             backbone_file=args.backbone_file,
             deploy=False,
             pretrained=False,
         )
     if variant == 'strong_head':
-        return SixDRepNet_StrongHead(
+        return QES6D_StrongHead(
             backbone_name='RepVGG-B1g2',
             backbone_file=args.backbone_file,
             deploy=False,
             pretrained=False,
         )
-    if variant == 'sixdrepnet':
-        return SixDRepNet(
+    if variant == 'QES6D':
+        return QES6D(
             backbone_name='RepVGG-B1g2',
             backbone_file=args.backbone_file,
             deploy=False,
@@ -163,7 +163,7 @@ def build_model(variant, args):
             use_se=args.use_se,
         )
     if variant == 'effnetv2':
-        return SixDRepNet_EffNetV2(
+        return QES6D_EffNetV2(
             backbone_name=args.effnet_backbone,
             pretrained=(not args.disable_torchvision_pretrained),
             use_se=args.use_se,
@@ -171,7 +171,7 @@ def build_model(variant, args):
             dropout=0.2,
         )
     if variant == 'effnetv2_advanced':
-        return SixDRepNet_EffNetV2_Advanced(
+        return QES6D_EffNetV2_Advanced(
             backbone_name='efficientnet_v2_s',
             pretrained=(not args.disable_torchvision_pretrained),
             use_se=True,
@@ -222,8 +222,8 @@ def auto_detect_gfpgan_path():
     for path in [
         '/root/miniconda3/envs/hopenet/lib/python3.10/site-packages/gfpgan/weights/GFPGANv1.3.pth',
         '/root/autodl-tmp/models/GFPGANv1.3.pth',
-        '/root/6DRepNet/gfpgan/weights/GFPGANv1.4.pth',
-        '/root/6DRepNet/gfpgan/weights/GFPGANv1.3.pth',
+        '/root/autodl-tmp/QES6D/gfpgan/weights/GFPGANv1.4.pth',
+        '/root/autodl-tmp/QES6D/gfpgan/weights/GFPGANv1.3.pth',
     ]:
         if os.path.exists(path):
             return path
@@ -235,7 +235,7 @@ def validate_aux_variants(aux_paths, aux_variants):
         return []
 
     if not aux_variants:
-        aux_variants = ['sixdrepnet_o']
+        aux_variants = ['QES6D_o']
 
     if len(aux_variants) == 1 and len(aux_paths) > 1:
         aux_variants = aux_variants * len(aux_paths)

@@ -96,13 +96,13 @@ class SEBlock(nn.Module):
         return x * y.expand_as(x)
 
 # ============================================
-# 原始 SixDRepNet（未修改版本，已注释）
+# 原始 QES6D（未修改版本，已注释）
 # ============================================
-class SixDRepNet_o(nn.Module):
+class QES6D_o(nn.Module):
     def __init__(self,
                  backbone_name, backbone_file, deploy,
                  pretrained=True):
-        super(SixDRepNet_o, self).__init__()
+        super(QES6D_o, self).__init__()
         repvgg_fn = get_RepVGG_func_by_name(backbone_name)
         backbone = repvgg_fn(deploy)
         if pretrained:
@@ -137,14 +137,14 @@ class SixDRepNet_o(nn.Module):
         return utils.compute_rotation_matrix_from_ortho6d(x)
 
 # ============================================
-# 改进版 SixDRepNet（带 MLP head + 可选 SE）
+# 改进版 QES6D（带 MLP head + 可选 SE）
 # ============================================
-class SixDRepNet(nn.Module):
+class QES6D(nn.Module):
     def __init__(self,
                  backbone_name, backbone_file, deploy,
                  pretrained=True,
                  use_se=False):
-        super(SixDRepNet, self).__init__()
+        super(QES6D, self).__init__()
         repvgg_fn = get_RepVGG_func_by_name(backbone_name)
         backbone = repvgg_fn(deploy)
         if pretrained:
@@ -189,10 +189,10 @@ class SixDRepNet(nn.Module):
         return utils.compute_rotation_matrix_from_ortho6d(x)
 
 
-# class SixDRepNet2(nn.Module):
+# class QES6D2(nn.Module):
 #     def __init__(self, block, layers, fc_layers=1):
 #         self.inplanes = 64
-#         super(SixDRepNet2, self).__init__()
+#         super(QES6D2, self).__init__()
 #         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
 #                                bias=False)
 #         self.bn1 = nn.BatchNorm2d(64)
@@ -255,9 +255,9 @@ class SixDRepNet(nn.Module):
 
 #         return out
 
-# class SixDRepNet_MultiFuse(nn.Module):
+# class QES6D_MultiFuse(nn.Module):
 #     """
-#     SixDRepNet with multi-level feature fusion (RepVGG backbone):
+#     QES6D with multi-level feature fusion (RepVGG backbone):
 #       - Extract features from stage2, stage3, stage4
 #       - Fuse them in an FPN-like manner
 #       - Regression head outputs 6D rotation representation
@@ -364,7 +364,7 @@ class SixDRepNet(nn.Module):
 #         R_pred = utils.compute_rotation_matrix_from_ortho6d(out6d)  # (B,3,3)
 #         return R_pred
 
-# class SixDRepNet_MultiFuse_CA(nn.Module):
+# class QES6D_MultiFuse_CA(nn.Module):
 #     """
 #     Multi-level feature fusion + Coordinate Attention (after fusion).
 #     Output: rotation matrix (B,3,3)
@@ -466,9 +466,9 @@ class SixDRepNet(nn.Module):
 #         return R_pred
 
 
-class SixDRepNet_StrongHead(nn.Module):
+class QES6D_StrongHead(nn.Module):
     """
-    Single-scale SixDRepNet (use stage4) + stronger regression head:
+    Single-scale QES6D (use stage4) + stronger regression head:
       GAP -> MLP(LN+GELU+Dropout) -> 6D -> rotation matrix
 
     Output: R_pred (B,3,3)
@@ -534,7 +534,7 @@ class SixDRepNet_StrongHead(nn.Module):
         R_pred = utils.compute_rotation_matrix_from_ortho6d(out6d)
         return R_pred
 
-# class SixDRepNet_EffNetV2(nn.Module):
+# class QES6D_EffNetV2(nn.Module):
 #     def __init__(self,
 #                  backbone_name='efficientnet_v2_l',
 #                  pretrained=True,
@@ -646,7 +646,7 @@ class SixDRepNet_StrongHead(nn.Module):
 
 #         return R_pred
 
-class SixDRepNet_EffNetV2(nn.Module):
+class QES6D_EffNetV2(nn.Module):
     def __init__(self,
                  backbone_name='efficientnet_v2_l',
                  pretrained=True,
@@ -715,7 +715,7 @@ class TRGStyleRefiner(nn.Module):
         delta_rot = self.delta_head(refined_feat)
         return rot6d_init + delta_rot
 
-class SixDRepNet_EffNetV2_Advanced(nn.Module):
+class QES6D_EffNetV2_Advanced(nn.Module):
     def __init__(self,
                  backbone_name='efficientnet_v2_m',
                  pretrained=True,

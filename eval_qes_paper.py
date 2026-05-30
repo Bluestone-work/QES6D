@@ -40,12 +40,12 @@ _UTILS_MODULE = _load_module_from_path(
     os.path.join(_PROJECT_DIR, 'QES6D', 'utils.py')
 )
 
-SixDRepNet = _MODEL_MODULE.SixDRepNet
-SixDRepNet_o = _MODEL_MODULE.SixDRepNet_o
-SixDRepNet_StrongHead = _MODEL_MODULE.SixDRepNet_StrongHead
-SixDRepNet_EffNetV2 = _MODEL_MODULE.SixDRepNet_EffNetV2
-SixDRepNet_EffNetV2_Advanced = getattr(_MODEL_MODULE, 'SixDRepNet_EffNetV2_Advanced', None)
-SixDRepNet_ConvNeXtV2 = getattr(_MODEL_MODULE, 'SixDRepNet_ConvNeXtV2', None)
+QES6D = _MODEL_MODULE.QES6D
+QES6D_o = _MODEL_MODULE.QES6D_o
+QES6D_StrongHead = _MODEL_MODULE.QES6D_StrongHead
+QES6D_EffNetV2 = _MODEL_MODULE.QES6D_EffNetV2
+QES6D_EffNetV2_Advanced = getattr(_MODEL_MODULE, 'QES6D_EffNetV2_Advanced', None)
+QES6D_ConvNeXtV2 = getattr(_MODEL_MODULE, 'QES6D_ConvNeXtV2', None)
 utils = _UTILS_MODULE
 
 
@@ -138,10 +138,10 @@ def parse_args():
     parser = argparse.ArgumentParser(description="No-GT evaluation for classroom head pose model")
     parser.add_argument("--model_path", type=str, required=True, help="Model checkpoint path")
     parser.add_argument("--model_variant", type=str, default="auto",
-                        choices=['auto', 'sixdrepnet', 'sixdrepnet_o', 'strong_head', 'effnetv2', 'convnextv2', 'effnetv2_advanced'],
+                        choices=['auto', 'QES6D', 'QES6D_o', 'strong_head', 'effnetv2', 'convnextv2', 'effnetv2_advanced'],
                         help="Model variant for loading checkpoint; auto reads from checkpoint args when possible")
     parser.add_argument("--model_use_se", type=str, default="auto", choices=["auto", "on", "off"],
-                        help="SE flag for SixDRepNet loading; auto reads checkpoint args.use_se when available")
+                        help="SE flag for QES6D loading; auto reads checkpoint args.use_se when available")
     parser.add_argument("--effnet_head_style", type=str, default="auto", choices=["auto", "baseline", "bn_relu6"],
                         help="Head style for effnetv2; auto reads checkpoint args.effnet_head_style when available")
     parser.add_argument("--data_dir", type=str, required=True, help="Directory of classroom frames")
@@ -311,7 +311,7 @@ def _is_deploy_state_dict(state_dict):
 
 
 def _use_test_plus2_model(snapshot_path):
-    target = '6DRepNet_300W_LP_AFLW2000.pth'
+    target = 'QES6D_300W_LP_AFLW2000.pth'
     return os.path.basename(os.path.abspath(snapshot_path)) == target
 
 
@@ -323,8 +323,8 @@ def _infer_model_variant_from_checkpoint(checkpoint, snapshot_path):
             if isinstance(mv, str) and mv.strip():
                 return mv.strip().lower()
     if _use_test_plus2_model(snapshot_path):
-        return 'sixdrepnet_o'
-    return 'sixdrepnet'
+        return 'QES6D_O'
+    return 'QES6D'
 
 
 def _infer_use_se_from_checkpoint(checkpoint):
@@ -360,8 +360,8 @@ def _infer_model_variant_from_sources(checkpoint, snapshot_path):
         if isinstance(mv, str) and mv.strip():
             return mv.strip().lower()
     if _use_test_plus2_model(snapshot_path):
-        return 'sixdrepnet_o'
-    return 'sixdrepnet'
+        return 'QES6D_O'
+    return 'QES6D'
 
 
 def _infer_use_se_from_sources(checkpoint, snapshot_path):
@@ -413,7 +413,7 @@ def load_model(snapshot_path, device, model_variant='auto', model_use_se='auto',
     state_dict = _extract_state_dict(checkpoint)
     if model_variant == 'auto':
         model_variant = _infer_model_variant_from_sources(checkpoint, snapshot_path)
-    model_variant = str(model_variant).lower()
+    model_variant = str(model_variant).strip().upper()
 
     if str(model_use_se).lower() == 'auto':
         use_se = _infer_use_se_from_sources(checkpoint, snapshot_path)
@@ -425,23 +425,23 @@ def load_model(snapshot_path, device, model_variant='auto', model_use_se='auto',
     else:
         resolved_effnet_head_style = str(effnet_head_style).lower()
 
-    if model_variant == 'sixdrepnet_o':
+    if model_variant == 'QES6D_O':
         deploy_mode = _is_deploy_state_dict(state_dict)
-        model = SixDRepNet_o(
+        model = QES6D_o(
             backbone_name='RepVGG-B1g2',
             backbone_file='',
             deploy=deploy_mode,
             pretrained=False
         ).to(device)
-    elif model_variant == 'strong_head':
-        model = SixDRepNet_StrongHead(
+    elif model_variant == 'STRONG_HEAD':
+        model = QES6D_StrongHead(
             backbone_name='RepVGG-B1g2',
-            backbone_file='/root/6DRepNet/sixdrepnet/RepVGG-B1g2-train.pth',
+            backbone_file='/root/autodl-tmp/QES6D/QES6D/RepVGG-B1g2-train.pth',
             deploy=False,
             pretrained=True
         ).to(device)
-    elif model_variant == 'effnetv2':
-        model = SixDRepNet_EffNetV2(
+    elif model_variant == 'EFFNETV2':
+        model = QES6D_EffNetV2(
             backbone_name=_infer_effnet_backbone_from_sources(checkpoint, snapshot_path),
             pretrained=True,
             use_se=use_se,
@@ -449,10 +449,10 @@ def load_model(snapshot_path, device, model_variant='auto', model_use_se='auto',
             dropout=0.2,
             head_style=resolved_effnet_head_style,
         ).to(device)
-    elif model_variant == 'convnextv2':
-        if SixDRepNet_ConvNeXtV2 is None:
-            raise ImportError('SixDRepNet_ConvNeXtV2 is not available in local QES6D/model.py')
-        model = SixDRepNet_ConvNeXtV2(
+    elif model_variant == 'CONVNEXTV2':
+        if QES6D_ConvNeXtV2 is None:
+            raise ImportError('QES6D_ConvNeXtV2 is not available in local QES6D/model.py')
+        model = QES6D_ConvNeXtV2(
             backbone_name=_infer_convnext_backbone_from_sources(checkpoint, snapshot_path),
             pretrained=True,
             use_cbam=True,
@@ -460,20 +460,20 @@ def load_model(snapshot_path, device, model_variant='auto', model_use_se='auto',
             head_dim=512,
             dropout=0.2,
         ).to(device)
-    elif model_variant == 'effnetv2_advanced':
-        if SixDRepNet_EffNetV2_Advanced is None:
-            raise ImportError('SixDRepNet_EffNetV2_Advanced is not available in local QES6D/model.py')
-        model = SixDRepNet_EffNetV2_Advanced(
+    elif model_variant == 'EFFNETV2_ADVANCED':
+        if QES6D_EffNetV2_Advanced is None:
+            raise ImportError('QES6D_EffNetV2_Advanced is not available in local QES6D/model.py')
+        model = QES6D_EffNetV2_Advanced(
             pretrained=True,
             use_coordconv=True,
             use_transformer=True,
             head_dim=512,
             dropout=0.2,
         ).to(device)
-    else:
-        model = SixDRepNet(
+    elif model_variant == 'QES6D':
+        model = QES6D(
             backbone_name='RepVGG-B1g2',
-            backbone_file='/root/6DRepNet/sixdrepnet/RepVGG-B1g2-train.pth',
+            backbone_file='/root/autodl-tmp/QES6D/QES6D/RepVGG-B1g2-train.pth',
             deploy=False,
             pretrained=True,
             use_se=use_se,

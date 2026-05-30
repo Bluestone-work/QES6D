@@ -36,16 +36,16 @@ from tqdm import tqdm
 
 try:
     from QES6D.model import (
-        SixDRepNet, SixDRepNet_o, SixDRepNet_StrongHead,
-        SixDRepNet_EffNetV2, SixDRepNet_EffNetV2_Advanced,
+        QES6D, QES6D_o, QES6D_StrongHead,
+        QES6D_EffNetV2, QES6D_EffNetV2_Advanced,
     )
     from QES6D.semi_supervised_datasets import create_semi_supervised_dataloaders
     from QES6D.loss import GeodesicPlusAxisLoss, RobustEulerAxisLoss
     import QES6D.utils as utils
 except ImportError:
     from model import (
-        SixDRepNet, SixDRepNet_o, SixDRepNet_StrongHead,
-        SixDRepNet_EffNetV2, SixDRepNet_EffNetV2_Advanced,
+        QES6D, QES6D_o, QES6D_StrongHead,
+        QES6D_EffNetV2, QES6D_EffNetV2_Advanced,
     )
     from semi_supervised_datasets import create_semi_supervised_dataloaders
     from loss import GeodesicPlusAxisLoss, RobustEulerAxisLoss
@@ -148,13 +148,13 @@ def parse_args():
                         default='/root/autodl-tmp/output/qes_paper_runs/effnetv2_full_semi_seed/best_model.pth',
                         help='Pretrained model path')
     parser.add_argument('--backbone_file', type=str,
-                        default='/root/6DRepNet/sixdrepnet/RepVGG-B1g2-train.pth',
+                        default='/root/autodl-tmp/QES6D/QES6D/RepVGG-B1g2-train.pth',
                         help='Backbone weights')
     parser.add_argument('--model_variant', type=str, default='strong_head',
-                        choices=['sixdrepnet', 'sixdrepnet_o', 'strong_head', 'effnetv2', 'convnextv2', 'effnetv2_advanced'],
+                        choices=['QES6D', 'QES6D_o', 'strong_head', 'effnetv2', 'convnextv2', 'effnetv2_advanced'],
                         help='Model variant from model.py')
     parser.add_argument('--use_se', action='store_true',
-                        help='Enable SE block in SixDRepNet / EffNetV2 when supported')
+                        help='Enable SE block in QES6D / EffNetV2 when supported')
     parser.add_argument('--effnet_backbone', type=str, default='efficientnet_v2_l',
                         choices=['efficientnet_v2_s', 'efficientnet_v2_m', 'efficientnet_v2_l'],
                         help='Backbone used when model_variant=effnetv2')
@@ -163,7 +163,7 @@ def parse_args():
     parser.add_argument('--effnet_head_style', type=str, default='baseline', choices=['baseline', 'bn_relu6'],
                         help='Head style used when model_variant=effnetv2')
     parser.add_argument('--disable_effnet_geometry_refine', action='store_true',
-                        help='Disable geometry latent + refinement in SixDRepNet_EffNetV2')
+                        help='Disable geometry latent + refinement in QES6D_EffNetV2')
     parser.add_argument('--disable_torchvision_pretrained', action='store_true',
                         help='Disable torchvision ImageNet pretrained weights download for EffNet/ConvNeXt backbones')
     parser.add_argument('--convnext_backbone', type=str, default='convnextv2_tiny',
@@ -906,23 +906,23 @@ def create_model_from_args(args, force_torchvision_pretrained=None):
     if force_torchvision_pretrained is not None:
         tv_pretrained = bool(force_torchvision_pretrained)
 
-    mv = str(args.model_variant).lower()
-    if mv == 'sixdrepnet_o':
-        return SixDRepNet_o(
+    mv = str(args.model_variant).strip().upper()
+    if mv == 'QES6D_O':
+        return QES6D_o(
             backbone_name='RepVGG-B1g2',
             backbone_file=args.backbone_file,
             deploy=False,
             pretrained=True
         )
     if mv == 'strong_head':
-        return SixDRepNet_StrongHead(
+        return QES6D_StrongHead(
             backbone_name='RepVGG-B1g2',
             backbone_file=args.backbone_file,
             deploy=False,
             pretrained=True
         )
     if mv == 'effnetv2':
-        return SixDRepNet_EffNetV2(
+        return QES6D_EffNetV2(
             backbone_name=args.effnet_backbone,
             pretrained=tv_pretrained,
             use_se=args.use_se,
@@ -933,7 +933,7 @@ def create_model_from_args(args, force_torchvision_pretrained=None):
             # head_style=args.effnet_head_style,
         )
     if mv == 'convnextv2':
-        return SixDRepNet_ConvNeXtV2(
+        return QES6D_ConvNeXtV2(
             backbone_name=args.convnext_backbone,
             pretrained=tv_pretrained,
             use_cbam=True,
@@ -942,7 +942,7 @@ def create_model_from_args(args, force_torchvision_pretrained=None):
             dropout=0.2,
         )
     if mv == 'effnetv2_advanced':
-        return SixDRepNet_EffNetV2_Advanced(
+        return QES6D_EffNetV2_Advanced(
             backbone_name='efficientnet_v2_s',
             pretrained=tv_pretrained,
             use_se=True,
@@ -950,13 +950,13 @@ def create_model_from_args(args, force_torchvision_pretrained=None):
             geo_dim=128,
             dropout=0.2
         )
-    # return SixDRepNet(
+    # return QES6D(
     #     backbone_name='RepVGG-B1g2',
     #     backbone_file=args.backbone_file,
     #     deploy=False,
     #     pretrained=True,
     #     use_se=args.use_se,
-    return SixDRepNet_EffNetV2_Advanced(
+    return QES6D_EffNetV2_Advanced(
             backbone_name='efficientnet_v2_s',
             pretrained=tv_pretrained,
             use_se=True,
@@ -1054,7 +1054,7 @@ def main():
             model = create_model_from_args(args, force_torchvision_pretrained=False)
         else:
             raise
-    # model = SixDRepNet_o(
+    # model = QES6D_o(
     #     backbone_name='RepVGG-B1g2',
     #     backbone_file=args.backbone_file,
     #     deploy=False,

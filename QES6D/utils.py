@@ -240,7 +240,7 @@ def resolve_yolo_weights(yolo_weights, yolo_version='yolov8', prefer_size='x', s
     if user_path:
         return user_path
 
-    base_dir = '/root/6DRepNet/facedat'
+    base_dir = '/root/autodl-tmp/QES6D/facedat'
     default_map = {
         ('yolov8', 'n'): os.path.join(base_dir, 'yolov8n-face.pt'),
         ('yolov8', 'x'): os.path.join(base_dir, 'yolov8x-face.pt'),
