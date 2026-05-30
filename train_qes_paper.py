@@ -1,15 +1,3 @@
-"""
-半监督训练脚本（论文主训练路径）
-
-当前策略：
-1. 支持验证集，并按 val_avg_mae 选择 best_model
-2. 支持 skip_pseudo_only_batch，避免纯伪标签 batch 主导训练
-3. 支持 face-level pseudo 数据过滤参数
-4. 支持 EMA teacher + weak/strong classroom consistency
-5. 保存 history.json / config.json
-6. 兼容旧格式 batch
-"""
-
 import os
 import argparse
 import random
@@ -60,7 +48,6 @@ def set_seed(seed: int):
 
 
 def parse_multi_path_args(values):
-    """将 argparse 的多次/多值输入统一展开为扁平路径列表。"""
     if values is None:
         return []
 
@@ -92,7 +79,6 @@ def parse_multi_path_args(values):
 def parse_args():
     parser = argparse.ArgumentParser(description='Semi-supervised training')
 
-    # 数据路径
     parser.add_argument('--labeled_data_dir', type=str, required=True,
                         help='Labeled dataset npz or root')
     parser.add_argument('--labeled_filename_list', type=str, required=True,
@@ -104,7 +90,6 @@ def parse_args():
                         dest='pseudo_data_root', nargs='+', action='append', required=True,
                         help='One or more pseudo label data roots. Can be passed multiple times')
 
-    # 验证集
     parser.add_argument('--val_data_dir', type=str, default='',
                         help='Validation dataset path')
     parser.add_argument('--val_filename_list', type=str, default='',
@@ -113,7 +98,6 @@ def parse_args():
                         choices=['val_avg_mae'],
                         help='Metric used to select best model')
 
-    # 伪标签过滤参数（给新的 *_faces.npz 用）
     parser.add_argument('--consistency_threshold_deg', type=float, default=None,
                         help='Max consistency score (deg) for pseudo samples')
     parser.add_argument('--max_model_consistency_deg', type=float, default=None,
@@ -143,7 +127,6 @@ def parse_args():
     parser.add_argument('--curriculum_model_consistency_end', type=float, default=6.0,
                         help='Final max cross-model disagreement for pseudo samples')
 
-    # 模型
     parser.add_argument('--pretrained_model', type=str,
                         default='/root/autodl-tmp/output/qes_paper_runs/effnetv2_full_semi_seed/best_model.pth',
                         help='Pretrained model path')
@@ -172,7 +155,6 @@ def parse_args():
                         choices=['custom', 'sup_only', 'pseudo', 'full_semi'],
                         help='Convenience preset for paper experiments')
 
-    # 半监督参数
     parser.add_argument('--pseudo_label_ratio', type=float, default=0.25,
                         help='Ratio of pseudo labels to labeled data')
     parser.add_argument('--confidence_threshold', type=float, default=0.90,
@@ -231,7 +213,6 @@ def parse_args():
     parser.add_argument('--disable_weighted_sampler', action='store_true',
                         help='Disable weighted pseudo sampling and use ordinary shuffle')
 
-    # 可选 refine / enhance
     parser.add_argument('--use_yolo_refine', action='store_true',
                         help='Use YOLO to refine pseudo face crops during training')
     parser.add_argument('--yolo_version', type=str, default='yolov8', choices=['yolov8', 'yolov11'],
@@ -258,7 +239,6 @@ def parse_args():
     parser.add_argument('--gfpgan_low_conf_threshold', type=float, default=0.85,
                         help='Confidence threshold for low-confidence GFPGAN gating')
 
-    # 训练参数
     parser.add_argument('--batch_size', type=int, default=80)
     parser.add_argument('--epochs', '--num_epochs', dest='epochs', type=int, default=80)
     parser.add_argument('--lr', type=float, default=1e-4)
@@ -274,7 +254,6 @@ def parse_args():
     parser.add_argument('--scheduler_gamma', type=float, default=0.5,
                         help='Gamma for multistep scheduler')
 
-    # 其他
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--output_dir', '--output_path', dest='output_dir', type=str,
@@ -469,7 +448,6 @@ def build_val_loader(val_data_dir, val_filename_list, batch_size, num_workers):
                              std=[0.229, 0.224, 0.225])
     ])
 
-    # 解析并修复验证列表路径（兼容 biwi_val.txt / val.txt 命名差异）
     val_filename_list = os.path.expanduser(str(val_filename_list))
     if not os.path.isfile(val_filename_list):
         requested_name = os.path.basename(val_filename_list)
@@ -531,7 +509,6 @@ def build_val_loader(val_data_dir, val_filename_list, batch_size, num_workers):
         print(f"[VAL] val_filename_list not found, fallback to: {resolved_path}")
         val_filename_list = resolved_path
 
-    # 优先识别你自己的扁平 npz
     use_flat_npz = False
     if os.path.isfile(val_data_dir) and val_data_dir.endswith('.npz'):
         try:
@@ -550,7 +527,6 @@ def build_val_loader(val_data_dir, val_filename_list, batch_size, num_workers):
             train_mode=False
         )
     else:
-        # 仅从项目内加载，避免误导入外部同名 datasets 包
         project_root = os.path.dirname(__file__)
         candidate_paths = [
             os.path.join(project_root, 'QES6D', 'datasets.py'),
@@ -763,7 +739,6 @@ def train_one_epoch(model, ema_model, train_loader, criterion_sup, criterion_pse
         if source_is_pseudo is not None:
             source_is_pseudo = source_is_pseudo.to(device)
 
-        # 分离 labeled / pseudo
         if source_is_pseudo is not None:
             is_pseudo = source_is_pseudo & (confidences >= args.confidence_threshold)
             is_labeled = ~source_is_pseudo
@@ -776,11 +751,9 @@ def train_one_epoch(model, ema_model, train_loader, criterion_sup, criterion_pse
         n_labeled = int(is_labeled.sum().item())
         n_pseudo = int(is_pseudo_active.sum().item())
 
-        # 统计计数：只统计真正参与训练的伪标签
         labeled_count += n_labeled
         pseudo_count += n_pseudo
 
-        # 如果纯伪标签 batch 不允许，则直接跳过
         if n_labeled == 0 and n_pseudo > 0 and args.skip_pseudo_only_batch:
             continue
         if n_labeled == 0 and n_pseudo == 0:
@@ -1127,7 +1100,7 @@ def main():
             enable_angle_bin_weight=(not args.disable_angle_bin_weight),
             reduction="none",
         )
-    # 保证 loss 模块内部 buffer 与模型/输入位于同一设备
+
     criterion_sup = criterion_sup.to(device)
     criterion_pseudo = criterion_pseudo.to(device)
 
