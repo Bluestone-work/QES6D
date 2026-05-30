@@ -1,8 +1,6 @@
 # QES6D
 
-This repository contains the paper-version QES6D training and evaluation framework extracted from `/root/autodl-tmp/QES6D`.
-
-QES6D is not only an inference wrapper. The main experiment path is the two-stage semi-supervised pipeline implemented by `run_qes_experiments.sh`:
+This repository contains the paper-version QES6D training and evaluation framework.
 
 1. supervised Stage-1 warm-up on labeled 300W-LP data;
 2. classroom pseudo-label refresh using the Stage-1 checkpoint;
